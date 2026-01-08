@@ -5,6 +5,7 @@ const sphere = /* @__PURE__ */ new Sphere();
 const matrix = /* @__PURE__ */ new Matrix4();
 
 // TODO: how can we use this for frustum culling?
+// TODO: account for a "custom" object?
 export class StaticSceneBVH extends BVH {
 
     constructor( root, options = {} ) {
@@ -48,6 +49,7 @@ export class StaticSceneBVH extends BVH {
 
     computePrimitiveBounds( offset, count, targetBuffer ) {
 
+        // TODO: account for "precise", "includeInstances"
         const { primitiveBuffer, objects, idMask, idBits } = this;
 		const boundsOffset = targetBuffer.offset || 0;
         for ( let i = offset; i < count; i ++ ) {
@@ -161,6 +163,7 @@ function getInstanceId( id, idBits, idMask ) {
 
 function fillPrimitiveBuffer( objects, idBits, target ) {
 
+    // TODO: account for "includeInstances"
     let index = 0;
     objects.forEach( ( object, i ) => { 
 
@@ -212,6 +215,7 @@ function fillPrimitiveBuffer( objects, idBits, target ) {
 
 function countPrimitives( array ) {
 
+    // TODO: account for "includeInstances"
     let total = 0;
     array.forEach( object => {
 
