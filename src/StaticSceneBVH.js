@@ -1,5 +1,5 @@
-import { Box3, BufferGeometry, Matrix4, Mesh, Vector3 } from 'three';
-import { BVH, INTERSECTED, NOT_INTERSECTED } from 'three-mesh-bvh';
+import { Box3, BufferGeometry, Matrix4, Mesh, Vector3, Ray } from 'three';
+import { BVH, INTERSECTED, NOT_INTERSECTED, FLOAT32_EPSILON } from 'three-mesh-bvh';
 
 const _geometry = /* @__PURE__ */ new BufferGeometry();
 const _matrix = /* @__PURE__ */ new Matrix4();
@@ -18,517 +18,518 @@ const _geometryRange = {};
 // TODO: add comments
 export class StaticSceneBVH extends BVH {
 
-    constructor( root, options = {} ) {
+	constructor( root, options = {} ) {
 
-        options = {
-            precise: false,
-            includeInstances: true,
-            matrix: Array.isArray( root ) ? new Matrix4() : root.matrixWorld,
-            maxLeafSize: 1,
-            ...options,
-        };
+		options = {
+			precise: false,
+			includeInstances: true,
+			matrix: Array.isArray( root ) ? new Matrix4() : root.matrixWorld,
+			maxLeafSize: 1,
+			...options,
+		};
 
-        super();
+		super();
 
-        const objectSet = new Set();
-        collectObjects( root, objectSet );
-        
-        const objects = Array.from( objectSet );
-        const idBits = Math.ceil( Math.log2( objects.length ) );
-        const idMask = constructIdMask( idBits );
+		const objectSet = new Set();
+		collectObjects( root, objectSet );
 
-        this.objects = objects;
-        this.idBits = idBits;
-        this.idMask = idMask;
-        this.primitiveBuffer = null;
-        this.primitiveBufferStride = 1;
+		const objects = Array.from( objectSet );
+		const idBits = Math.ceil( Math.log2( objects.length ) );
+		const idMask = constructIdMask( idBits );
 
-        // settings
-        this.precise = options.precise;
-        this.includeInstances = options.includeInstances;
-        this.matrixWorld = options.matrixWorld;
+		this.objects = objects;
+		this.idBits = idBits;
+		this.idMask = idMask;
+		this.primitiveBuffer = null;
+		this.primitiveBufferStride = 1;
 
-        this.init( options );
+		// settings
+		this.precise = options.precise;
+		this.includeInstances = options.includeInstances;
+		this.matrixWorld = options.matrixWorld;
 
-    }
+		this.init( options );
 
-    init( options ) {
+	}
 
-        this.primitiveBuffer = new Uint32Array( this._countPrimitives( objects ) );
-        this._fillPrimitiveBuffer( objects, idBits, this.primitiveBuffer );
+	init( options ) {
 
-        super.init( options );
+		const { objects, idBits } = this;
+		this.primitiveBuffer = new Uint32Array( this._countPrimitives( objects ) );
+		this._fillPrimitiveBuffer( objects, idBits, this.primitiveBuffer );
 
-    }
+		super.init( options );
 
-    computePrimitiveBounds( offset, count, targetBuffer ) {
+	}
 
-        const { primitiveBuffer } = this;
+	computePrimitiveBounds( offset, count, targetBuffer ) {
+
+		const { primitiveBuffer } = this;
 		const boundsOffset = targetBuffer.offset || 0;
-        
-        _inverseMatrix.copy( this.matrixWorld ).invert();
-        for ( let i = offset; i < count; i ++ ) {
 
-            this._getPrimitiveBoundingBox( primitiveBuffer[ i ], _inverseMatrix, _box );
+		_inverseMatrix.copy( this.matrixWorld ).invert();
+		for ( let i = offset; i < count; i ++ ) {
 
-            _box.getCenter( _center );
-            _box.getSize( _size );
+			this._getPrimitiveBoundingBox( primitiveBuffer[ i ], _inverseMatrix, _box );
 
-            const { x, y, z } = _center;
-            const hx = _size.x / 2;
-            const hy = _size.y / 2;
-            const hz = _size.z / 2;
+			_box.getCenter( _center );
+			_box.getSize( _size );
 
-            const baseIndex = ( i - boundsOffset ) * 6;
-            targetBuffer[ baseIndex + 0 ] = x;
-            targetBuffer[ baseIndex + 1 ] = hx + Math.abs( x ) * FLOAT32_EPSILON;
-            targetBuffer[ baseIndex + 2 ] = y;
-            targetBuffer[ baseIndex + 3 ] = hy + Math.abs( y ) * FLOAT32_EPSILON;
-            targetBuffer[ baseIndex + 4 ] = z;
-            targetBuffer[ baseIndex + 5 ] = hz + Math.abs( z ) * FLOAT32_EPSILON;
+			const { x, y, z } = _center;
+			const hx = _size.x / 2;
+			const hy = _size.y / 2;
+			const hz = _size.z / 2;
 
-        }
+			const baseIndex = ( i - boundsOffset ) * 6;
+			targetBuffer[ baseIndex + 0 ] = x;
+			targetBuffer[ baseIndex + 1 ] = hx + Math.abs( x ) * FLOAT32_EPSILON;
+			targetBuffer[ baseIndex + 2 ] = y;
+			targetBuffer[ baseIndex + 3 ] = hy + Math.abs( y ) * FLOAT32_EPSILON;
+			targetBuffer[ baseIndex + 4 ] = z;
+			targetBuffer[ baseIndex + 5 ] = hz + Math.abs( z ) * FLOAT32_EPSILON;
 
-        return targetBuffer;
+		}
 
-    }
+		return targetBuffer;
 
-    getRootRanges() {
+	}
 
-        return [ {
-            offset: 0,
-            count: this.objects.length,
-        } ];
-        
-    }
+	getRootRanges() {
 
-    shapecast( callbacks ) {
+		return [ {
+			offset: 0,
+			count: this.objects.length,
+		} ];
 
-        return this.shapecast( {
-            ...callbacks,
+	}
 
-            intersectsPrimitive: callbacks.intersectsObject,
-            scratchPrimitive: null,
-            iterate: iterateOverObjects,
-        } );
+	shapecast( callbacks ) {
 
-    }
+		return this.shapecast( {
+			...callbacks,
 
-    raycast( raycaster, intersects = [] ) {
+			intersectsPrimitive: callbacks.intersectsObject,
+			scratchPrimitive: null,
+			iterate: iterateOverObjects,
+		} );
 
-        const { matrixWorld, includeInstances } = this;
-        const { firstHitOnly } = raycaster;
-        const localIntersects = [];
+	}
 
-        _inverseMatrix.copy( matrixWorld ).invert();
-        _ray.copy( raycaster.ray ).applyMatrix4( _inverseMatrix );
+	raycast( raycaster, intersects = [] ) {
 
-        let closestDistance = Infinity;
-        let closestHit = null;
+		const { matrixWorld, includeInstances } = this;
+		const { firstHitOnly } = raycaster;
+		const localIntersects = [];
 
-        this.shapecast( {
-            boundsTraverseOrder: box => {
+		_inverseMatrix.copy( matrixWorld ).invert();
+		_ray.copy( raycaster.ray ).applyMatrix4( _inverseMatrix );
 
-                return box.distanceToPoint( _ray.origin );
+		let closestDistance = Infinity;
+		let closestHit = null;
 
-            },
-            intersectsBounds: box => {
+		this.shapecast( {
+			boundsTraverseOrder: box => {
 
-                if ( firstHitOnly ) {
+				return box.distanceToPoint( _ray.origin );
 
-                    if ( ! _ray.intersectBox( box, _vec ) ) {
+			},
+			intersectsBounds: box => {
 
-                        return NOT_INTERSECTED;
+				if ( firstHitOnly ) {
 
-                    }
+					if ( ! _ray.intersectBox( box, _vec ) ) {
 
-                    _vec.applyMatrix4( matrixWorld );
+						return NOT_INTERSECTED;
 
-                    return raycaster.ray.distanceTo( _vec ) < closestDistance ? INTERSECTED : NOT_INTERSECTED;
+					}
 
-                } else {
+					_vec.applyMatrix4( matrixWorld );
 
-                    return _ray.intersectsBox( box ) ? INTERSECTED : NOT_INTERSECTED;
+					return raycaster.ray.distanceTo( _vec ) < closestDistance ? INTERSECTED : NOT_INTERSECTED;
 
-                }
+				} else {
 
-            },
-            intersectsObject( object, instanceId ) {
+					return _ray.intersectsBox( box ) ? INTERSECTED : NOT_INTERSECTED;
 
-                if ( ! object.visible ) {
+				}
 
-                    return;
+			},
+			intersectsObject( object, instanceId ) {
 
-                }
+				if ( ! object.visible ) {
 
-                if ( object.isInstancedMesh && includeInstances ) {
+					return;
 
-                    _mesh.geometry = object.geometry;
-                    _mesh.material = object.material;
+				}
 
-                    object.getMatrixAt( instanceId, _mesh.matrixWorld );
-                    _mesh.raycast( raycaster, localIntersects );
+				if ( object.isInstancedMesh && includeInstances ) {
 
-                    localIntersects.forEach( hit => {
-                        
-                        hit.object = object;
-                        hit.instanceId = instanceId;
+					_mesh.geometry = object.geometry;
+					_mesh.material = object.material;
 
-                    } );
+					object.getMatrixAt( instanceId, _mesh.matrixWorld );
+					_mesh.raycast( raycaster, localIntersects );
 
-                    _mesh.material = null;
+					localIntersects.forEach( hit => {
 
-                } else if ( object.isBatchedMesh && includeInstances ) {
+						hit.object = object;
+						hit.instanceId = instanceId;
 
-                    if ( ! object.getVisibleAt( instanceId ) ) {
+					} );
 
-                        return;
+					_mesh.material = null;
 
-                    }
+				} else if ( object.isBatchedMesh && includeInstances ) {
 
-                    const geometryId = object.getGeometryIdAt( instanceId );
-                    const geometryRange = object.getGeometryRangeAt( geometryId, _geometryRange );
+					if ( ! object.getVisibleAt( instanceId ) ) {
 
-                    _geometry.index = object.geometry.index;
-                    _geometry.attributes.position = object.geometry.attributes.position;
-                    _geometry.setDrawRange( geometryRange.start, geometryRange.count );
+						return;
 
-                    _mesh.geometry = _geometry;
-                    _mesh.material = object.material;
+					}
 
-                    object.getMatrixAt( instanceId, _mesh.matrixWorld );
-                    _mesh.matrixWorld.premultiply( object.matrixWorld );
-                    _mesh.raycast( raycaster, localIntersects );
+					const geometryId = object.getGeometryIdAt( instanceId );
+					const geometryRange = object.getGeometryRangeAt( geometryId, _geometryRange );
 
-                    localIntersects.forEach( hit => {
-                        
-                        hit.object = object;
-                        hit.batchId = instanceId;
+					_geometry.index = object.geometry.index;
+					_geometry.attributes.position = object.geometry.attributes.position;
+					_geometry.setDrawRange( geometryRange.start, geometryRange.count );
 
-                    } );
+					_mesh.geometry = _geometry;
+					_mesh.material = object.material;
 
-                    _mesh.material = null;
+					object.getMatrixAt( instanceId, _mesh.matrixWorld );
+					_mesh.matrixWorld.premultiply( object.matrixWorld );
+					_mesh.raycast( raycaster, localIntersects );
 
-                } else {
+					localIntersects.forEach( hit => {
 
-                    object.raycast( raycaster, localIntersects );
+						hit.object = object;
+						hit.batchId = instanceId;
 
-                }
+					} );
 
-                if ( firstHitOnly ) {
+					_mesh.material = null;
 
-                    localIntersects.forEach( hit => {
+				} else {
 
-                        if ( hit.distance < closestDistance ) {
+					object.raycast( raycaster, localIntersects );
 
-                            closestDistance = hit.distance;
-                            closestHit = hit;
+				}
 
-                        }
+				if ( firstHitOnly ) {
 
-                    } );
+					localIntersects.forEach( hit => {
 
-                } else {
+						if ( hit.distance < closestDistance ) {
 
-                    intersects.push( ...localIntersects );
+							closestDistance = hit.distance;
+							closestHit = hit;
 
-                }
+						}
 
-            },
-        } );
+					} );
 
-        if ( firstHitOnly && closestHit ) {
+				} else {
 
-            intersects.push( closestHit );
+					intersects.push( ...localIntersects );
 
-        }
+				}
 
-        return intersects;
+			},
+		} );
 
-    }
+		if ( firstHitOnly && closestHit ) {
 
-    _getPrimitiveBoundingBox( compositeId, inverseMatrixWorld, target ) {
+			intersects.push( closestHit );
 
-        const { objects, idMask, idBits, precise, includeInstances } = this;
-        const id = getObjectId( compositeId, idMask );
-        const instanceId = getInstanceId( compositeId, idBits, idMask );
-        const object = objects[ id ];
+		}
 
-        if ( ! includeInstances && ( object.isInstancedMesh || object.isBatchedMesh ) ) {
+		return intersects;
 
-            if ( ! object.boundingBox ) {
+	}
 
-                object.computeBoundingBox();
+	_getPrimitiveBoundingBox( compositeId, inverseMatrixWorld, target ) {
 
-            }
+		const { objects, idMask, idBits, precise, includeInstances } = this;
+		const id = getObjectId( compositeId, idMask );
+		const instanceId = getInstanceId( compositeId, idBits, idMask );
+		const object = objects[ id ];
 
-            _matrix
-                .copy( object.matrixWorld )
-                .premultiply( _inverseMatrix );
+		if ( ! includeInstances && ( object.isInstancedMesh || object.isBatchedMesh ) ) {
 
-            _box
-                .copy( object.boundingBox )
-                .applyMatrix4( _matrix );
+			if ( ! object.boundingBox ) {
 
-        } else if ( precise ) {
+				object.computeBoundingBox();
 
-            if ( object.isInstancedMesh ) {
+			}
 
-                object
-                    .getMatrixAt( instanceId, _matrix );
+			_matrix
+				.copy( object.matrixWorld )
+				.premultiply( _inverseMatrix );
 
-                _matrix
-                    .premultiply( object.matrixWorld )
-                    .premultiply( inverseMatrixWorld );
+			_box
+				.copy( object.boundingBox )
+				.applyMatrix4( _matrix );
 
-                getPreciseBounds( object.geometry, _matrix, _box );
+		} else if ( precise ) {
 
-            } else if ( object.isBatchedMesh ) {
+			if ( object.isInstancedMesh ) {
 
-                const geometryId = object.getGeometryIdAt( instanceId );
-                const geometryRange = object.getGeometryRangeAt( geometryId, _geometryRange );
+				object
+					.getMatrixAt( instanceId, _matrix );
 
-                _geometry.index = object.geometry.index;
-                _geometry.attributes.position = object.geometry.attributes.position;
-                _geometry.setDrawRange( geometryRange.start, geometryRange.count );
+				_matrix
+					.premultiply( object.matrixWorld )
+					.premultiply( inverseMatrixWorld );
 
-                object
-                    .getMatrixAt( instanceId, _matrix );
+				getPreciseBounds( object.geometry, _matrix, _box );
 
-                _matrix
-                    .premultiply( object.matrixWorld )
-                    .premultiply( inverseMatrixWorld );
+			} else if ( object.isBatchedMesh ) {
 
-                getPreciseBounds( _geometry, _matrix, _box );
+				const geometryId = object.getGeometryIdAt( instanceId );
+				const geometryRange = object.getGeometryRangeAt( geometryId, _geometryRange );
 
-            } else {
+				_geometry.index = object.geometry.index;
+				_geometry.attributes.position = object.geometry.attributes.position;
+				_geometry.setDrawRange( geometryRange.start, geometryRange.count );
 
-                _matrix
-                    .copy( object.matrixWorld )
-                    .premultiply( _inverseMatrix );
+				object
+					.getMatrixAt( instanceId, _matrix );
 
-                getPreciseBounds( object.geometry, _matrix, _box );
+				_matrix
+					.premultiply( object.matrixWorld )
+					.premultiply( inverseMatrixWorld );
 
-            }
+				getPreciseBounds( _geometry, _matrix, _box );
 
-        } else {
+			} else {
 
-            if ( object.isInstancedMesh ) {
+				_matrix
+					.copy( object.matrixWorld )
+					.premultiply( _inverseMatrix );
 
-                if ( ! object.geometry.boundingBox ) {
+				getPreciseBounds( object.geometry, _matrix, _box );
 
-                    object.geometry.computeBoundingBox();
+			}
 
-                }
+		} else {
 
-                object
-                    .getMatrixAt( instanceId, _matrix );
+			if ( object.isInstancedMesh ) {
 
-                _matrix
-                    .premultiply( object.matrixWorld )
-                    .premultiply( inverseMatrixWorld );
+				if ( ! object.geometry.boundingBox ) {
 
-                target
-                    .copy( object.geometry.boundingBox )
-                    .applyMatrix4( _matrix );
+					object.geometry.computeBoundingBox();
 
-            } else if ( object.isBatchedMesh ) {
+				}
 
-                const geometryId = object.getGeometryIdAt( instanceId );
+				object
+					.getMatrixAt( instanceId, _matrix );
 
-                object
-                    .getMatrixAt( instanceId, _matrix );
+				_matrix
+					.premultiply( object.matrixWorld )
+					.premultiply( inverseMatrixWorld );
 
-                _matrix
-                    .premultiply( object.matrixWorld )
-                    .premultiply( inverseMatrixWorld );
+				target
+					.copy( object.geometry.boundingBox )
+					.applyMatrix4( _matrix );
 
-    			object
-                    .getBoundingBoxAt( geometryId, target )
-                    .applyMatrix4( _matrix );
+			} else if ( object.isBatchedMesh ) {
 
-            } else {
+				const geometryId = object.getGeometryIdAt( instanceId );
 
-                if ( ! object.geometry.boundingBox ) {
+				object
+					.getMatrixAt( instanceId, _matrix );
 
-                    object.geometry.computeBoundingBox();
+				_matrix
+					.premultiply( object.matrixWorld )
+					.premultiply( inverseMatrixWorld );
 
-                }
+				object
+					.getBoundingBoxAt( geometryId, target )
+					.applyMatrix4( _matrix );
 
-                target
-                    .copy( object.geometry.boundingSphere )
-                    .applyMatrix4( object.matrixWorld )
-                    .applyMatrix4( inverseMatrixWorld );
+			} else {
 
-            }
+				if ( ! object.geometry.boundingBox ) {
 
-        }   
+					object.geometry.computeBoundingBox();
 
-    }
+				}
 
-    _countPrimitives( array ) {
+				target
+					.copy( object.geometry.boundingSphere )
+					.applyMatrix4( object.matrixWorld )
+					.applyMatrix4( inverseMatrixWorld );
 
-        const { includeInstances } = this;
-        let total = 0;
-        array.forEach( object => {
+			}
 
-            if ( object.isInstancedMesh && includeInstances ) {
+		}
 
-                total += object.count;
+	}
 
-            } else if ( object.isBatchedMesh && includeInstances ) {
+	_countPrimitives( array ) {
 
-                total += object.instanceCount;
+		const { includeInstances } = this;
+		let total = 0;
+		array.forEach( object => {
 
-            } else {
+			if ( object.isInstancedMesh && includeInstances ) {
 
-                total ++;
+				total += object.count;
 
-            }
+			} else if ( object.isBatchedMesh && includeInstances ) {
 
-        } );
+				total += object.instanceCount;
 
-        return total;
+			} else {
 
-    }
-        
-    _fillPrimitiveBuffer( objects, idBits, target ) {
+				total ++;
 
-        const { includeInstances } = this;
-        let index = 0;
-        objects.forEach( ( object, i ) => { 
+			}
 
-            if ( object.isInstancedMesh && includeInstances ) {
+		} );
 
-                const count = object.count;
-                for ( let c = 0; c < count; c ++ ) {
+		return total;
 
-                    target[ index ] = c << idBits & i;
-                    index ++;
+	}
 
-                }
-                
-            } else if ( object.isBatchedMesh && includeInstances ) {
+	_fillPrimitiveBuffer( objects, idBits, target ) {
 
-                const count = object.instanceCount;
-                let instance = 0;
-                let iter = 0;
-                while ( instance < count && iter < 1e6 ) {
-                
-                    iter ++;
+		const { includeInstances } = this;
+		let index = 0;
+		objects.forEach( ( object, i ) => {
 
-                    try {
+			if ( object.isInstancedMesh && includeInstances ) {
 
-                        object.getVisibleAt( instance );
+				const count = object.count;
+				for ( let c = 0; c < count; c ++ ) {
 
-                        target[ index ] = instance << idBits & i;
-                        instance ++;
-                        index ++;
+					target[ index ] = c << idBits & i;
+					index ++;
 
-                    } catch {
+				}
 
-                        //
+			} else if ( object.isBatchedMesh && includeInstances ) {
 
-                    }
+				const count = object.instanceCount;
+				let instance = 0;
+				let iter = 0;
+				while ( instance < count && iter < 1e6 ) {
 
-                }
+					iter ++;
 
-            } else {
+					try {
 
-                target[ index ] = i;
-                index ++;
+						object.getVisibleAt( instance );
 
-            }
+						target[ index ] = instance << idBits & i;
+						instance ++;
+						index ++;
 
-        } );
+					} catch {
 
-    }
+						//
+
+					}
+
+				}
+
+			} else {
+
+				target[ index ] = i;
+				index ++;
+
+			}
+
+		} );
+
+	}
 
 }
 
 function constructIdMask( idBits ) {
 
-    let mask = 0;
-    for ( let i = 0; i < idBits; i ++ ) {
+	let mask = 0;
+	for ( let i = 0; i < idBits; i ++ ) {
 
-        mask = mask << 1 | 1;
+		mask = mask << 1 | 1;
 
-    }
+	}
 
-    return mask;
+	return mask;
 
 }
 
 function getObjectId( id, idMask ) {
 
-    return id & idMask;
+	return id & idMask;
 
 }
 
 function getInstanceId( id, idBits, idMask ) {
 
-    return ( id & ( ~ idMask ) ) >> idBits;
+	return ( id & ( ~ idMask ) ) >> idBits;
 
 }
 
 function collectObjects( root, objectSet = new Set() ) {
 
-    if ( Array.isArray( root ) ) {
+	if ( Array.isArray( root ) ) {
 
-        root.forEach( object => collectObjects( object, objectSet ) );
+		root.forEach( object => collectObjects( object, objectSet ) );
 
-    } else {
+	} else {
 
-        root.traverse( child => {
+		root.traverse( child => {
 
-            if ( child.isMesh || child.isLine || child.isPoints ) {
+			if ( child.isMesh || child.isLine || child.isPoints ) {
 
-                objectSet.add( child );
+				objectSet.add( child );
 
-            }
+			}
 
-        } );
+		} );
 
-    }
+	}
 
 }
 
 function getPreciseBounds( geometry, matrix, target ) {
 
-    target.empty();
+	target.empty();
 
-    const drawRange = geometry.drawRange;
-    const indexAttr = geometry.index;
-    const posAttr = geometry.attributes.position;
-    const offset = drawRange.offset;
-    const count = Math.min( indexAttr.count - offset, drawRange.count );
-    for ( let i = offset, l = offset + count; i < l; i ++ ) {
+	const drawRange = geometry.drawRange;
+	const indexAttr = geometry.index;
+	const posAttr = geometry.attributes.position;
+	const offset = drawRange.offset;
+	const count = Math.min( indexAttr.count - offset, drawRange.count );
+	for ( let i = offset, l = offset + count; i < l; i ++ ) {
 
-        let vi = i;
-        if ( indexAttr ) {
+		let vi = i;
+		if ( indexAttr ) {
 
-            vi = indexAttr.getX( vi );
+			vi = indexAttr.getX( vi );
 
-        }
+		}
 
-        _vec.fromBufferAttribute( posAttr, vi ).applyMatrix4( matrix );
-        target.expandByPoint( _vec );
+		_vec.fromBufferAttribute( posAttr, vi ).applyMatrix4( matrix );
+		target.expandByPoint( _vec );
 
-    }
+	}
 
-    return target;
+	return target;
 
 }
 
-function iterateOverObjects( offset, count, bvh, callback, contained, depth, scratch ) {
+function iterateOverObjects( offset, count, bvh, callback, contained, depth, /* scratch */ ) {
 
 	const { primitiveBuffer, objects, idMask, idBits } = bvh;
 	for ( let i = offset, l = count + offset; i < l; i ++ ) {
 
-        const compositeId = primitiveBuffer[ i ];
-        const id = getObjectId( compositeId, idMask );
-        const instanceId = getInstanceId( compositeId, idBits, idMask );
-        const object = objects[ id ];
+		const compositeId = primitiveBuffer[ i ];
+		const id = getObjectId( compositeId, idMask );
+		const instanceId = getInstanceId( compositeId, idBits, idMask );
+		const object = objects[ id ];
 		if ( callback( object, instanceId, contained, depth ) ) {
 
 			return true;
