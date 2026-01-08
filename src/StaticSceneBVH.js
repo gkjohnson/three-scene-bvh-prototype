@@ -1,5 +1,5 @@
 import { Box3, BufferGeometry, Matrix4, Mesh, Vector3 } from 'three';
-import { BVH } from 'three-mesh-bvh';
+import { BVH, INTERSECTED, NOT_INTERSECTED } from 'three-mesh-bvh';
 
 const _geometry = /* @__PURE__ */ new BufferGeometry();
 const _matrix = /* @__PURE__ */ new Matrix4();
@@ -16,7 +16,6 @@ const _geometryRange = {};
 // TODO: account for a "custom" object? Not necessary here? Create a more abstract foundation for this case?
 // TODO: can we handle margin? Custom expansion?
 // TODO: add comments
-// TODO: finish raycasting
 export class StaticSceneBVH extends BVH {
 
     constructor( root, options = {} ) {
@@ -135,17 +134,38 @@ export class StaticSceneBVH extends BVH {
             },
             intersectsBounds: box => {
 
-                // TODO: early out
-                return _ray.intersectsBox( box ) ? INTERSECTED : NOT_INTERSECTED;
+                if ( firstHitOnly ) {
+
+                    if ( ! _ray.intersectBox( box, _vec ) ) {
+
+                        return NOT_INTERSECTED;
+
+                    }
+
+                    _vec.applyMatrix4( matrixWorld );
+
+                    return raycaster.ray.distanceTo( _vec ) < closestDistance ? INTERSECTED : NOT_INTERSECTED;
+
+                } else {
+
+                    return _ray.intersectsBox( box ) ? INTERSECTED : NOT_INTERSECTED;
+
+                }
 
             },
             intersectsObject( object, instanceId ) {
 
-                // TODO: handle "firstHitOnly"
+                if ( ! object.visible ) {
+
+                    return;
+
+                }
 
                 if ( object.isInstancedMesh && includeInstances ) {
 
                     _mesh.geometry = object.geometry;
+                    _mesh.material = object.material;
+
                     object.getMatrixAt( instanceId, _mesh.matrixWorld );
                     _mesh.raycast( raycaster, localIntersects );
 
@@ -156,9 +176,38 @@ export class StaticSceneBVH extends BVH {
 
                     } );
 
+                    _mesh.material = null;
+
                 } else if ( object.isBatchedMesh && includeInstances ) {
 
-                    // TODO
+                    if ( ! object.getVisibleAt( instanceId ) ) {
+
+                        return;
+
+                    }
+
+                    const geometryId = object.getGeometryIdAt( instanceId );
+                    const geometryRange = object.getGeometryRangeAt( geometryId, _geometryRange );
+
+                    _geometry.index = object.geometry.index;
+                    _geometry.attributes.position = object.geometry.attributes.position;
+                    _geometry.setDrawRange( geometryRange.start, geometryRange.count );
+
+                    _mesh.geometry = _geometry;
+                    _mesh.material = object.material;
+
+                    object.getMatrixAt( instanceId, _mesh.matrixWorld );
+                    _mesh.matrixWorld.premultiply( object.matrixWorld );
+                    _mesh.raycast( raycaster, localIntersects );
+
+                    localIntersects.forEach( hit => {
+                        
+                        hit.object = object;
+                        hit.batchId = instanceId;
+
+                    } );
+
+                    _mesh.material = null;
 
                 } else {
 
