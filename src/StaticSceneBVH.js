@@ -1,4 +1,4 @@
-import { Box3, BufferGeometry, Matrix4, Vector3 } from 'three';
+import { Box3, BufferGeometry, Matrix4, Mesh, Vector3 } from 'three';
 import { BVH } from 'three-mesh-bvh';
 
 const _geometry = /* @__PURE__ */ new BufferGeometry();
@@ -8,10 +8,15 @@ const _box = /* @__PURE__ */ new Box3();
 const _vec = /* @__PURE__ */ new Vector3();
 const _center = /* @__PURE__ */ new Vector3();
 const _size = /* @__PURE__ */ new Vector3();
+const _ray = /* @__PURE__ */ new Ray();
+const _mesh = /* @__PURE__ */ new Mesh();
 const _geometryRange = {};
 
 // TODO: how can we use this for frustum culling?
 // TODO: account for a "custom" object? Not necessary here? Create a more abstract foundation for this case?
+// TODO: can we handle margin? Custom expansion?
+// TODO: add comments
+// TODO: finish raycasting
 export class StaticSceneBVH extends BVH {
 
     constructor( root, options = {} ) {
@@ -20,6 +25,7 @@ export class StaticSceneBVH extends BVH {
             precise: false,
             includeInstances: true,
             matrix: Array.isArray( root ) ? new Matrix4() : root.matrixWorld,
+            maxLeafSize: 1,
             ...options,
         };
 
@@ -102,17 +108,93 @@ export class StaticSceneBVH extends BVH {
         return this.shapecast( {
             ...callbacks,
 
-            // TODO: handle these
-            intersectsPrimitive: callbacks.intersectsPoint,
-            scratchPrimitive: point,
-            iterate: iterateOverPoints,
+            intersectsPrimitive: callbacks.intersectsObject,
+            scratchPrimitive: null,
+            iterate: iterateOverObjects,
         } );
 
     }
 
-    raycast( raycaster, intersects ) {
+    raycast( raycaster, intersects = [] ) {
 
-        // TODO: support "firstHitOnly"
+        const { matrixWorld, includeInstances } = this;
+        const { firstHitOnly } = raycaster;
+        const localIntersects = [];
+
+        _inverseMatrix.copy( matrixWorld ).invert();
+        _ray.copy( raycaster.ray ).applyMatrix4( _inverseMatrix );
+
+        let closestDistance = Infinity;
+        let closestHit = null;
+
+        this.shapecast( {
+            boundsTraverseOrder: box => {
+
+                return box.distanceToPoint( _ray.origin );
+
+            },
+            intersectsBounds: box => {
+
+                // TODO: early out
+                return _ray.intersectsBox( box ) ? INTERSECTED : NOT_INTERSECTED;
+
+            },
+            intersectsObject( object, instanceId ) {
+
+                // TODO: handle "firstHitOnly"
+
+                if ( object.isInstancedMesh && includeInstances ) {
+
+                    _mesh.geometry = object.geometry;
+                    object.getMatrixAt( instanceId, _mesh.matrixWorld );
+                    _mesh.raycast( raycaster, localIntersects );
+
+                    localIntersects.forEach( hit => {
+                        
+                        hit.object = object;
+                        hit.instanceId = instanceId;
+
+                    } );
+
+                } else if ( object.isBatchedMesh && includeInstances ) {
+
+                    // TODO
+
+                } else {
+
+                    object.raycast( raycaster, localIntersects );
+
+                }
+
+                if ( firstHitOnly ) {
+
+                    localIntersects.forEach( hit => {
+
+                        if ( hit.distance < closestDistance ) {
+
+                            closestDistance = hit.distance;
+                            closestHit = hit;
+
+                        }
+
+                    } );
+
+                } else {
+
+                    intersects.push( ...localIntersects );
+
+                }
+
+            },
+        } );
+
+        if ( firstHitOnly && closestHit ) {
+
+            intersects.push( closestHit );
+
+        }
+
+        return intersects;
 
     }
 
@@ -386,5 +468,26 @@ function getPreciseBounds( geometry, matrix, target ) {
     }
 
     return target;
+
+}
+
+function iterateOverObjects( offset, count, bvh, callback, contained, depth, scratch ) {
+
+	const { primitiveBuffer, objects, idMask, idBits } = bvh;
+	for ( let i = offset, l = count + offset; i < l; i ++ ) {
+
+        const compositeId = primitiveBuffer[ i ];
+        const id = getObjectId( compositeId, idMask );
+        const instanceId = getInstanceId( compositeId, idBits, idMask );
+        const object = objects[ id ];
+		if ( callback( object, instanceId, contained, depth ) ) {
+
+			return true;
+
+		}
+
+	}
+
+	return false;
 
 }
