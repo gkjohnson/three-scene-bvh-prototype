@@ -1,0 +1,28 @@
+{
+  "name": "three-scene-bvh-prototype",
+  "version": "0.0.1",
+  "homepage": "https://github.com/gkjohnson/three-scene-bvh-prototype#readme",
+  "bugs": {
+    "url": "https://github.com/gkjohnson/three-scene-bvh-prototype/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gkjohnson/three-scene-bvh-prototype.git"
+  },
+  "author": "Garrett Johnson <garrett.kjohnson@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "three": "^0.182.0",
+    "three-mesh-bvh": "^0.9.5"
+  },
+  "peerDependencies": {
+    "three": ">=0.170.0",
+    "three-mesh-bvh": ">=0.9.5"
+  }
+}
