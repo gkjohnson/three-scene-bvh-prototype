@@ -172,6 +172,7 @@ export class StaticSceneBVH extends BVH {
 					_mesh.material = object.material;
 
 					object.getMatrixAt( instanceId, _mesh.matrixWorld );
+					_mesh.matrixWorld.premultiply( object.matrixWorld );
 					_mesh.raycast( raycaster, localIntersects );
 
 					localIntersects.forEach( hit => {
