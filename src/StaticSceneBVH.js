@@ -105,7 +105,7 @@ export class StaticSceneBVH extends BVH {
 
 	shapecast( callbacks ) {
 
-		return this.shapecast( {
+		return super.shapecast( {
 			...callbacks,
 
 			intersectsPrimitive: callbacks.intersectsObject,
@@ -357,7 +357,7 @@ export class StaticSceneBVH extends BVH {
 				}
 
 				target
-					.copy( object.geometry.boundingSphere )
+					.copy( object.geometry.boundingBox )
 					.applyMatrix4( object.matrixWorld )
 					.applyMatrix4( inverseMatrixWorld );
 
@@ -404,7 +404,7 @@ export class StaticSceneBVH extends BVH {
 				const count = object.count;
 				for ( let c = 0; c < count; c ++ ) {
 
-					target[ index ] = c << idBits & i;
+					target[ index ] = ( c << idBits ) | i;
 					index ++;
 
 				}
@@ -422,7 +422,7 @@ export class StaticSceneBVH extends BVH {
 
 						object.getVisibleAt( instance );
 
-						target[ index ] = instance << idBits & i;
+						target[ index ] = ( instance << idBits ) | i;
 						instance ++;
 						index ++;
 
