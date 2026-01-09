@@ -136,7 +136,12 @@ function createSpheres() {
 	}
 
 	// Create geometry and materials
-	const geometry = new THREE.SphereGeometry( 0.25, 50, 50 );
+	const geometry = new THREE.TorusKnotGeometry();
+	const geometries = [
+		new THREE.TorusGeometry( 0.25, 0.1, 50, 100 ),
+		new THREE.SphereGeometry( 0.25, 50, 50 ),
+	];
+
 	const materials = [
 		new THREE.MeshStandardMaterial( { color: 0xe91e63 } ),
 		new THREE.MeshStandardMaterial( { color: 0x2196f3 } ),
@@ -146,9 +151,10 @@ function createSpheres() {
 	];
 
 	// Create spheres in a random distribution
-	for ( let i = 0; i < 10000; i ++ ) {
+	for ( let i = 0; i < 7500; i ++ ) {
 
 		const material = materials[ i % materials.length ];
+		const geometry = geometries[ i % geometries.length ];
 		const mesh = new THREE.Mesh( geometry, material );
 
 		// Random position
@@ -157,9 +163,9 @@ function createSpheres() {
 
 		// Random rotation for variety
 		mesh.rotation.set(
-			Math.random() * Math.PI,
-			Math.random() * Math.PI,
-			Math.random() * Math.PI
+			Math.random() * 2 * Math.PI,
+			Math.random() * 2 * Math.PI,
+			Math.random() * 2 * Math.PI
 		);
 
 		mesh.scale.setScalar( 0.25 + 0.75 * Math.random() );
