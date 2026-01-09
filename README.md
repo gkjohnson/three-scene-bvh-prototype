@@ -59,6 +59,8 @@ group.sceneBoundsTree.shapecast( { /* ... */ } );
 
 ## StaticSceneBVH
 
+A class used for building a BVH of scene or series of objects that are static and unchanging. Adding, removing, or moving objects will require constructing a new BVH.
+
 ### constructor
 
 ```js
