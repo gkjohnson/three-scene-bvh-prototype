@@ -1,5 +1,7 @@
 import { Box3, BufferGeometry, Matrix4, Mesh, Vector3, Ray } from 'three';
-import { BVH, INTERSECTED, NOT_INTERSECTED, FLOAT32_EPSILON } from 'three-mesh-bvh';
+import { BVH, INTERSECTED, NOT_INTERSECTED } from 'three-mesh-bvh';
+
+const FLOAT32_EPSILON = Math.pow( 2, - 24 );
 
 const _geometry = /* @__PURE__ */ new BufferGeometry();
 const _matrix = /* @__PURE__ */ new Matrix4();
@@ -23,7 +25,7 @@ export class StaticSceneBVH extends BVH {
 		options = {
 			precise: false,
 			includeInstances: true,
-			matrix: Array.isArray( root ) ? new Matrix4() : root.matrixWorld,
+			matrixWorld: Array.isArray( root ) ? new Matrix4() : root.matrixWorld,
 			maxLeafSize: 1,
 			...options,
 		};
@@ -145,7 +147,7 @@ export class StaticSceneBVH extends BVH {
 
 					_vec.applyMatrix4( matrixWorld );
 
-					return raycaster.ray.distanceTo( _vec ) < closestDistance ? INTERSECTED : NOT_INTERSECTED;
+					return raycaster.ray.origin.distanceTo( _vec ) < closestDistance ? INTERSECTED : NOT_INTERSECTED;
 
 				} else {
 
@@ -496,14 +498,14 @@ function collectObjects( root, objectSet = new Set() ) {
 
 function getPreciseBounds( geometry, matrix, target ) {
 
-	target.empty();
+	target.makeEmpty();
 
 	const drawRange = geometry.drawRange;
 	const indexAttr = geometry.index;
 	const posAttr = geometry.attributes.position;
-	const offset = drawRange.offset;
-	const count = Math.min( indexAttr.count - offset, drawRange.count );
-	for ( let i = offset, l = offset + count; i < l; i ++ ) {
+	const start = drawRange.start;
+	const count = Math.min( indexAttr.count - start, drawRange.count );
+	for ( let i = start, l = start + count; i < l; i ++ ) {
 
 		let vi = i;
 		if ( indexAttr ) {
