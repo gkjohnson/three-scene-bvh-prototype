@@ -5,6 +5,8 @@ A prototype for a generalized Scene BVH implementation to enable efficient spati
 # Use
 
 ```js
+import { StaticSceneBVH } from 'three-scene-bvh-prototype';
+
 // Set up a group with any number of children for rendering.
 // Once children are added they cannot change or move.
 const group = new Group();
@@ -23,6 +25,12 @@ const intersects = staticBVH.raycast( raycaster );
 ```
 
 ```js
+import {
+	computeSceneBVH,
+	disposeSceneBVH,
+	acceleratedSceneRaycast,
+} from 'three-scene-bvh-prototype';
+
 // Add new BVH construction functions
 THREE.Object3D.prototype.computeSceneBVH = computeSceneBVH;
 THREE.Object3D.prototype.disposeSceneBVH = disposeSceneBVH;
