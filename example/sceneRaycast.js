@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'stats.js';
-import { MeshBVHHelper } from 'three-mesh-bvh';
+import { AVERAGE, CENTER, MeshBVHHelper, SAH } from 'three-mesh-bvh';
 import { computeSceneBoundsTree, disposeSceneBoundsTree, acceleratedSceneRaycast } from '../src/ExtensionUtilities.js';
 
 // Extend Three.js Object3D prototype with scene BVH methods
@@ -15,6 +15,7 @@ const params = {
 	animate: true,
 	bvh: {
 		enabled: true,
+		strategy: CENTER,
 		visualize: false,
 		depth: 15,
 		displayParents: false,
@@ -99,6 +100,7 @@ function init() {
 
 	const bvhFolder = gui.addFolder( 'Scene BVH' );
 	bvhFolder.add( params.bvh, 'enabled' ).onChange( updateBVH );
+	bvhFolder.add( params.bvh, 'strategy', { CENTER, AVERAGE, SAH } ).onChange( updateBVH );
 	bvhFolder.add( params.bvh, 'precise' ).onChange( updateBVH );
 
 	const helperFolder = gui.addFolder( 'BVH Helper' );
@@ -123,15 +125,12 @@ function init() {
 		}
 
 	} );
-	bvhFolder.open();
-
-	const raycastFolder = gui.addFolder( 'Raycast' );
-	raycastFolder.add( params.raycast, 'firstHitOnly' ).onChange( () => {
+	bvhFolder.add( params.raycast, 'firstHitOnly' ).onChange( () => {
 
 		raycaster.firstHitOnly = params.raycast.firstHitOnly;
 
 	} );
-	raycastFolder.open();
+	bvhFolder.open();
 
 	// Event listeners
 	window.addEventListener( 'resize', onWindowResize, false );
@@ -316,6 +315,7 @@ function updateBVH() {
 		sphereContainer.updateMatrixWorld();
 
 		sphereContainer.computeSceneBoundsTree( {
+			strategy: params.bvh.strategy,
 			precise: params.bvh.precise,
 			maxLeafSize: 1,
 		} );
