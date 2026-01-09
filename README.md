@@ -4,13 +4,18 @@ A prototype for a generalized Scene BVH implementation to enable efficient spati
 
 # Use
 
+Use the StaticSceneBVH instance directly:
+
 ```js
 import { StaticSceneBVH } from 'three-scene-bvh-prototype';
+
+// ...
 
 // Set up a group with any number of children for rendering.
 // Once children are added they cannot change or move.
 const group = new Group();
 group.add( /* ... */ );
+scene.add( group );
 
 const staticBVH = new StaticSceneBVH( group, {
 	precise: true,
@@ -24,6 +29,8 @@ staticBVH.shapecast( { /* ... */ } );
 const intersects = staticBVH.raycast( raycaster );
 ```
 
+Or use convenience functions for construction & raycasting:
+
 ```js
 import {
 	computeSceneBVH,
@@ -35,7 +42,7 @@ import {
 THREE.Object3D.prototype.computeSceneBVH = computeSceneBVH;
 THREE.Object3D.prototype.disposeSceneBVH = disposeSceneBVH;
 
-//
+// ...
 
 // Override the raycast function with one that will use BVH if available
 group.raycast = acceleratedSceneRaycast;
