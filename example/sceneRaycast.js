@@ -11,6 +11,8 @@ THREE.Object3D.prototype.disposeSceneBoundsTree = disposeSceneBoundsTree;
 
 const bgColor = 0x131619;
 const params = {
+	mode: 'batched',
+	animate: true,
 	bvh: {
 		enabled: true,
 		visualize: false,
@@ -26,6 +28,7 @@ const params = {
 let renderer, scene, camera, controls, stats;
 let sphereContainer, sceneBVH, bvhHelper;
 let raycaster, mouse, highlightMesh;
+let lastTime = performance.now();
 let infoElement;
 
 init();
@@ -45,18 +48,20 @@ function init() {
 
 	// Scene setup
 	scene = new THREE.Scene();
-	scene.fog = new THREE.Fog( bgColor, 0, 10 )
+	scene.fog = new THREE.Fog( bgColor, 0, 10 );
 
 	// Lights
 	const light = new THREE.DirectionalLight( 0xffffff, 2.5 );
 	light.position.set( 1, 2, 1 );
-	scene.add( light );
-	scene.add( new THREE.AmbientLight( 0xffffff, 1 ) );
+
+	const revLight = new THREE.DirectionalLight( 0xffffff, 0.75 );
+	revLight.position.set( 1, 2, 1 ).multiplyScalar( - 1 );
+	scene.add( light, revLight );
+	scene.add( new THREE.AmbientLight( 0xffffff, .75 ) );
 
 	// Camera setup
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 200 );
-	camera.position.set( 0, 0, 20 );
-	camera.updateProjectionMatrix();
+	camera.position.set( 18, 10, 0 );
 
 	// Controls
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -89,6 +94,9 @@ function init() {
 	// GUI
 	const gui = new GUI();
 
+	gui.add( params, 'mode', [ 'group', 'instanced', 'batched', 'mix' ] ).onChange( updateFromOptions );
+	gui.add( params, 'animate' );
+
 	const bvhFolder = gui.addFolder( 'Scene BVH' );
 	bvhFolder.add( params.bvh, 'enabled' ).onChange( updateBVH );
 	bvhFolder.add( params.bvh, 'precise' ).onChange( updateBVH );
@@ -97,14 +105,22 @@ function init() {
 	helperFolder.add( params.bvh, 'visualize' ).name( 'enabled' );
 	helperFolder.add( params.bvh, 'displayParents' ).onChange( v => {
 
-		bvhHelper.displayParents = v;
-		bvhHelper.update();
+		if ( bvhHelper ) {
+
+			bvhHelper.displayParents = v;
+			bvhHelper.update();
+
+		}
 
 	} );
 	helperFolder.add( params.bvh, 'depth' ).min( 1 ).max( 20 ).step( 1 ).onChange( v => {
 
-		bvhHelper.depth = v;
-		bvhHelper.update();
+		if ( bvhHelper ) {
+
+			bvhHelper.depth = v;
+			bvhHelper.update();
+
+		}
 
 	} );
 	bvhFolder.open();
@@ -125,52 +141,154 @@ function init() {
 
 function createSpheres() {
 
-	// Clear existing spheres
+	// Clear existing content
 	while ( sphereContainer.children.length ) {
 
 		const child = sphereContainer.children[ 0 ];
 		child.material.dispose();
 		child.geometry.dispose();
+
+		if ( child.dispose ) {
+
+			child.dispose();
+
+		}
+
 		sphereContainer.remove( child );
 
 	}
 
-	// Create geometry and materials
-	const geometry = new THREE.TorusKnotGeometry();
+	const count = 10000;
 	const geometries = [
-		new THREE.TorusGeometry( 0.25, 0.1, 50, 100 ),
-		new THREE.SphereGeometry( 0.25, 50, 50 ),
+		new THREE.TorusGeometry( 0.25, 0.1, 30, 30 ),
+		new THREE.SphereGeometry( 0.25, 30, 30 ),
 	];
 
-	const materials = [
-		new THREE.MeshStandardMaterial( { color: 0xe91e63 } ),
-		new THREE.MeshStandardMaterial( { color: 0x2196f3 } ),
-		new THREE.MeshStandardMaterial( { color: 0x4caf50 } ),
-		new THREE.MeshStandardMaterial( { color: 0xff9800 } ),
-		new THREE.MeshStandardMaterial( { color: 0x9c27b0 } ),
+	const colors = [
+		new THREE.Color( 0xE91E63 ),
+		new THREE.Color( 0x03A9F4 ),
+		new THREE.Color( 0x4CAF50 ),
+		new THREE.Color( 0xFFC107 ),
+		new THREE.Color( 0x9C27B0 ),
 	];
 
-	// Create spheres in a random distribution
-	for ( let i = 0; i < 7500; i ++ ) {
+	// Helper to generate random transform
+	const _matrix = new THREE.Matrix4();
+	const _position = new THREE.Vector3();
+	const _rotation = new THREE.Euler();
+	const _quaternion = new THREE.Quaternion();
+	const _scale = new THREE.Vector3();
 
-		const material = materials[ i % materials.length ];
-		const geometry = geometries[ i % geometries.length ];
-		const mesh = new THREE.Mesh( geometry, material );
+	let groupCount = 0;
+	let instancedCount = 0;
+	let batchedCount = 0;
 
-		// Random position
-		const d = Math.sqrt( Math.random() );
-		mesh.position.randomDirection().multiplyScalar( 10 * d * d );
+	switch ( params.mode ) {
 
-		// Random rotation for variety
-		mesh.rotation.set(
+		case 'group':
+			groupCount = count;
+			break;
+		case 'instanced':
+			instancedCount = count;
+			break;
+		case 'batched':
+			batchedCount = count;
+			break;
+		case 'mix':
+			groupCount = Math.ceil( count / 3 );
+			instancedCount = Math.ceil( count / 3 );
+			batchedCount = Math.ceil( count / 3 );
+			break;
+
+	}
+
+
+	if ( groupCount !== 0 ) {
+
+		const materials = colors.map( c => new THREE.MeshStandardMaterial( { color: c } ) );
+
+		// Create individual meshes in a group
+		for ( let i = 0; i < groupCount; i ++ ) {
+
+			const material = materials[ i % materials.length ];
+			const geometry = geometries[ i % geometries.length ];
+			const mesh = new THREE.Mesh( geometry, material );
+
+			getRandomTransform( mesh.matrix );
+			mesh.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale );
+
+			sphereContainer.add( mesh );
+
+		}
+
+	}
+
+	if ( instancedCount !== 0 ) {
+
+		// Create InstancedMesh for each geometry type
+		const material = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } );
+		geometries.forEach( geometry => {
+
+			const c = Math.ceil( instancedCount / geometries.length );
+			const instancedMesh = new THREE.InstancedMesh( geometry, material, c );
+
+			for ( let i = 0; i < c; i ++ ) {
+
+				getRandomTransform( _matrix );
+				instancedMesh.setMatrixAt( i, _matrix );
+
+				const colorIndex = i % colors.length;
+				instancedMesh.setColorAt( i, colors[ colorIndex ] );
+
+			}
+
+			sphereContainer.add( instancedMesh );
+
+		} );
+
+	}
+
+	if ( batchedCount !== 0 ) {
+
+		// Create BatchedMesh
+		const maxVertexCount = geometries.reduce( ( sum, g ) => sum + g.attributes.position.count, 0 );
+		const maxIndexCount = geometries.reduce( ( sum, g ) => sum + ( g.index ? g.index.count : 0 ), 0 );
+		const material = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } );
+
+		const batchedMesh = new THREE.BatchedMesh( batchedCount, maxVertexCount, maxIndexCount, material );
+
+		// Add geometries
+		const geometryIds = geometries.map( g => batchedMesh.addGeometry( g ) );
+
+		// Add instances
+		for ( let i = 0; i < batchedCount; i ++ ) {
+
+			const geometryId = geometryIds[ i % geometries.length ];
+			const instanceId = batchedMesh.addInstance( geometryId );
+			const colorIndex = i % colors.length;
+
+			getRandomTransform( _matrix );
+			batchedMesh.setMatrixAt( instanceId, _matrix );
+			batchedMesh.setColorAt( instanceId, colors[ colorIndex ] );
+
+		}
+
+		sphereContainer.add( batchedMesh );
+
+	}
+
+	function getRandomTransform( matrix ) {
+
+		const d = Math.cbrt( Math.random() );
+		_position.randomDirection().multiplyScalar( 10 * d * d );
+		_rotation.set(
 			Math.random() * 2 * Math.PI,
 			Math.random() * 2 * Math.PI,
 			Math.random() * 2 * Math.PI
 		);
-
-		mesh.scale.setScalar( 0.25 + 0.75 * Math.random() );
-
-		sphereContainer.add( mesh );
+		_quaternion.setFromEuler( _rotation );
+		_scale.setScalar( 0.25 + 0.75 * Math.random() );
+		matrix.compose( _position, _quaternion, _scale );
 
 	}
 
@@ -280,6 +398,14 @@ function render() {
 		bvhHelper.visible = params.bvh.visualize;
 
 	}
+
+	if ( params.animate ) {
+
+		sphereContainer.rotation.y += ( performance.now() - lastTime ) * 1e-4 * 0.5;
+
+	}
+
+	lastTime = performance.now();
 
 	scene.fog.near = camera.position.length() - 7.5;
 	scene.fog.far = camera.position.length() + 5;

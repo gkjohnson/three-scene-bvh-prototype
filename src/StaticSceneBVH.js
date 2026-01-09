@@ -17,7 +17,6 @@ const _geometryRange = {};
 // TODO: how can we use this for frustum culling?
 // TODO: account for a "custom" object? Not necessary here? Create a more abstract foundation for this case?
 // TODO: can we handle margin? Custom expansion?
-// TODO: add comments
 export class StaticSceneBVH extends BVH {
 
 	constructor( root, options = {} ) {
@@ -101,7 +100,7 @@ export class StaticSceneBVH extends BVH {
 
 	getRootRanges() {
 
-		return [ { offset: 0, count: this.objects.length } ];
+		return [ { offset: 0, count: this.primitiveBuffer.length } ];
 
 	}
 
