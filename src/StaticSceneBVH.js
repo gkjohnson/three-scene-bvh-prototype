@@ -32,9 +32,12 @@ export class StaticSceneBVH extends BVH {
 
 		super();
 
+		// collect all the leaf node objects in the geometries
 		const objectSet = new Set();
 		collectObjects( root, objectSet );
 
+		// calculate the number of bits required for the primary id, leaving the remainder
+		// for the instanceId count
 		const objects = Array.from( objectSet );
 		const idBits = Math.ceil( Math.log2( objects.length ) );
 		const idMask = constructIdMask( idBits );
@@ -98,10 +101,7 @@ export class StaticSceneBVH extends BVH {
 
 	getRootRanges() {
 
-		return [ {
-			offset: 0,
-			count: this.objects.length,
-		} ];
+		return [ { offset: 0, count: this.objects.length } ];
 
 	}
 
@@ -123,6 +123,7 @@ export class StaticSceneBVH extends BVH {
 		const { firstHitOnly } = raycaster;
 		const localIntersects = [];
 
+		// transform the ray into the local bvh frame
 		_inverseMatrix.copy( matrixWorld ).invert();
 		_ray.copy( raycaster.ray ).applyMatrix4( _inverseMatrix );
 
@@ -145,8 +146,8 @@ export class StaticSceneBVH extends BVH {
 
 					}
 
+					// early out if the box is further than the closest raycast
 					_vec.applyMatrix4( matrixWorld );
-
 					return raycaster.ray.origin.distanceTo( _vec ) < closestDistance ? INTERSECTED : NOT_INTERSECTED;
 
 				} else {
@@ -158,6 +159,7 @@ export class StaticSceneBVH extends BVH {
 			},
 			intersectsObject( object, instanceId ) {
 
+				// skip non visible objects
 				if ( ! object.visible ) {
 
 					return;
@@ -166,6 +168,7 @@ export class StaticSceneBVH extends BVH {
 
 				if ( object.isInstancedMesh && includeInstances ) {
 
+					// raycast the instance
 					_mesh.geometry = object.geometry;
 					_mesh.material = object.material;
 
@@ -189,6 +192,7 @@ export class StaticSceneBVH extends BVH {
 
 					}
 
+					// extract the geometry & material
 					const geometryId = object.getGeometryIdAt( instanceId );
 					const geometryRange = object.getGeometryRangeAt( geometryId, _geometryRange );
 
@@ -199,10 +203,12 @@ export class StaticSceneBVH extends BVH {
 					_mesh.geometry = _geometry;
 					_mesh.material = object.material;
 
+					// perform a raycast against the proxy mesh
 					object.getMatrixAt( instanceId, _mesh.matrixWorld );
 					_mesh.matrixWorld.premultiply( object.matrixWorld );
 					_mesh.raycast( raycaster, localIntersects );
 
+					// fix up the fields
 					localIntersects.forEach( hit => {
 
 						hit.object = object;
@@ -218,6 +224,7 @@ export class StaticSceneBVH extends BVH {
 
 				}
 
+				// find the closest hit to track
 				if ( firstHitOnly ) {
 
 					localIntersects.forEach( hit => {
@@ -240,6 +247,7 @@ export class StaticSceneBVH extends BVH {
 			},
 		} );
 
+		// save the closest hit only if firstHitOnly = true
 		if ( firstHitOnly && closestHit ) {
 
 			intersects.push( closestHit );
@@ -250,6 +258,7 @@ export class StaticSceneBVH extends BVH {
 
 	}
 
+	// get the bounding box of a primitive node accounting for the bvh options
 	_getPrimitiveBoundingBox( compositeId, inverseMatrixWorld, target ) {
 
 		const { objects, idMask, idBits, precise, includeInstances } = this;
@@ -259,6 +268,7 @@ export class StaticSceneBVH extends BVH {
 
 		if ( ! includeInstances && ( object.isInstancedMesh || object.isBatchedMesh ) ) {
 
+			// if we're not using instances then just account for the overall bounds of the BatchedMesh and InstancedMesh
 			if ( ! object.boundingBox ) {
 
 				object.computeBoundingBox();
@@ -275,6 +285,8 @@ export class StaticSceneBVH extends BVH {
 
 		} else if ( precise ) {
 
+			// calculate precise bounds if necessary by calculating the bounds of all vertices
+			// in the bvh frame
 			if ( object.isInstancedMesh ) {
 
 				object
@@ -316,6 +328,8 @@ export class StaticSceneBVH extends BVH {
 
 		} else {
 
+			// otherwise use the fast path of extracting the cached, AABB bounds and transforming them
+			// into the local BVH frame
 			if ( object.isInstancedMesh ) {
 
 				if ( ! object.geometry.boundingBox ) {
@@ -369,11 +383,12 @@ export class StaticSceneBVH extends BVH {
 
 	}
 
-	_countPrimitives( array ) {
+	// counts the total number of primitives required by the objects in given array of objects
+	_countPrimitives( objects ) {
 
 		const { includeInstances } = this;
 		let total = 0;
-		array.forEach( object => {
+		objects.forEach( object => {
 
 			if ( object.isInstancedMesh && includeInstances ) {
 
@@ -449,6 +464,8 @@ export class StaticSceneBVH extends BVH {
 
 }
 
+// id functions
+// construct a mask with the given number of bits set to 1
 function constructIdMask( idBits ) {
 
 	let mask = 0;
@@ -462,18 +479,21 @@ function constructIdMask( idBits ) {
 
 }
 
+// extract the primary object id given the provided mask
 function getObjectId( id, idMask ) {
 
 	return id & idMask;
 
 }
 
+// extract the instance id given the mask and number of bits to shift
 function getInstanceId( id, idBits, idMask ) {
 
 	return ( id & ( ~ idMask ) ) >> idBits;
 
 }
 
+// traverse the full scene and collect all leaves
 function collectObjects( root, objectSet = new Set() ) {
 
 	if ( Array.isArray( root ) ) {
@@ -496,6 +516,7 @@ function collectObjects( root, objectSet = new Set() ) {
 
 }
 
+// calculate precise box bounds of the given geometry in the given frame
 function getPreciseBounds( geometry, matrix, target ) {
 
 	target.makeEmpty();
@@ -523,6 +544,7 @@ function getPreciseBounds( geometry, matrix, target ) {
 
 }
 
+// iterator helper for raycasting
 function iterateOverObjects( offset, count, bvh, callback, contained, depth, /* scratch */ ) {
 
 	const { primitiveBuffer, objects, idMask, idBits } = bvh;
