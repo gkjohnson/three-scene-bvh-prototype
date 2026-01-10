@@ -16,10 +16,12 @@ const params = {
 	bvh: {
 		enabled: true,
 		strategy: CENTER,
+		precise: false,
+		includeInstances: true,
+
 		visualize: false,
 		depth: 15,
 		displayParents: false,
-		precise: false,
 	},
 	raycast: {
 		firstHitOnly: true,
@@ -102,6 +104,7 @@ function init() {
 	bvhFolder.add( params.bvh, 'enabled' ).onChange( updateBVH );
 	bvhFolder.add( params.bvh, 'strategy', { CENTER, AVERAGE, SAH } ).onChange( updateBVH );
 	bvhFolder.add( params.bvh, 'precise' ).onChange( updateBVH );
+	bvhFolder.add( params.bvh, 'includeInstances' ).onChange( updateBVH );
 
 	const helperFolder = gui.addFolder( 'BVH Helper' );
 	helperFolder.add( params.bvh, 'visualize' ).name( 'enabled' );
@@ -317,6 +320,7 @@ function updateBVH() {
 		sphereContainer.computeSceneBoundsTree( {
 			strategy: params.bvh.strategy,
 			precise: params.bvh.precise,
+			includeInstances: params.bvh.includeInstances,
 			maxLeafSize: 1,
 		} );
 		sphereContainer.raycast = acceleratedSceneRaycast;
