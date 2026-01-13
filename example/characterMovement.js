@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import Stats from 'stats.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { MeshBVH, MeshBVHHelper, StaticGeometryGenerator } from 'three-mesh-bvh';
+import { MeshBVH, BVHHelper } from 'three-mesh-bvh';
 import { StaticSceneBVH } from '..';
 
 const params = {
@@ -272,17 +272,11 @@ function loadColliderEnvironment() {
 
 			level = gltfScene;
 
-			const staticGenerator = new StaticGeometryGenerator( level );
-			staticGenerator.attributes = [ 'position' ];
-
-			const mergedGeometry = staticGenerator.generate();
-			mergedGeometry.boundsTree = new MeshBVH( mergedGeometry );
-
 			scene.add( level );
 
 			level.updateMatrixWorld( true );
 			sceneBVH = new StaticSceneBVH( level, { maxLeafSize: 1 } );
-			sceneHelper = new MeshBVHHelper( level, sceneBVH );
+			sceneHelper = new BVHHelper( level, sceneBVH );
 			sceneHelper.update();
 			sceneHelper.opacity = 0.75;
 			sceneHelper.color.set( 0xffffff );
@@ -398,7 +392,7 @@ function updatePlayer( delta ) {
 
 		intersectsObject: object => {
 
-			if ( ! object.visible ) {
+			if ( ! object.visible || object.material.transparent ) {
 
 				return;
 
