@@ -497,8 +497,30 @@ function updatePlayer( delta ) {
 
 	// adjust the camera
 	camera.position.sub( controls.target );
-	controls.target.copy( player.position );
-	controls.target.y += 1;
+	controls.target.sub( player.position );
+
+	const scalar = camera.position.length() * 0.1;
+	let heightOffset = controls.target.y;
+	controls.target.y = 0;
+	if ( controls.target.length() > 4 * scalar ) {
+
+		controls.target.normalize();
+		controls.target.multiplyScalar( 4 * scalar );
+
+	}
+
+	if ( heightOffset < 1.5 - 0.5 * scalar ) {
+
+		heightOffset = 1.5 - 0.5 * scalar;
+
+	} else if ( heightOffset > 1.5 + 1.5 * scalar ) {
+
+		heightOffset = 1.5 + 1.5 * scalar;
+
+	}
+
+	controls.target.y = heightOffset;
+	controls.target.add( player.position );
 	camera.position.add( controls.target );
 
 	// if the player has fallen too far below the level reset their position to the start
