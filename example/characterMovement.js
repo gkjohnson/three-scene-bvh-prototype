@@ -12,7 +12,7 @@ const params = {
 	firstPerson: false,
 	displayBVH: false,
 	visualizeDepth: 10,
-	gravity: - 30,
+	gravity: - 80,
 	playerSpeed: 10,
 	physicsSteps: 5,
 
@@ -55,7 +55,7 @@ function init() {
 
 	// scene setup
 	scene = new THREE.Scene();
-	scene.fog = new THREE.Fog( bgColor, 20, 70 );
+	// scene.fog = new THREE.Fog( bgColor, 20, 70 );
 
 	// lights
 	const light = new THREE.DirectionalLight( 0xffffff, 3 );
@@ -95,8 +95,8 @@ function init() {
 	player = new THREE.Group();
 	player.rotation.y = Math.PI / 2;
 	player.capsuleInfo = {
-		radius: 0.5,
-		segment: new THREE.Line3( new THREE.Vector3(), new THREE.Vector3( 0, 1.0, 0.0 ) )
+		radius: 0.75,
+		segment: new THREE.Line3( new THREE.Vector3( 0, 0.75, 0 ), new THREE.Vector3( 0, 1.0, 0.0 ) )
 	};
 
 	playerMesh = new THREE.Group();
@@ -106,7 +106,7 @@ function init() {
 		new RoundedBoxGeometry( 1.0, 2.0, 1.0, 10, 0.5 ),
 		new THREE.MeshStandardMaterial()
 	);
-	body.position.y = 0.5;
+	body.position.y = 0.75;
 	body.castShadow = true;
 	body.receiveShadow = true;
 	body.material.shadowSide = 2;
@@ -116,7 +116,7 @@ function init() {
 		new THREE.MeshStandardMaterial()
 	);
 	arms.rotation.x = Math.PI / 2;
-	arms.position.y = 1;
+	arms.position.y = 1.25;
 	arms.castShadow = true;
 	arms.receiveShadow = true;
 	arms.material.shadowSide = 2;
@@ -126,7 +126,7 @@ function init() {
 		new THREE.MeshStandardMaterial()
 	);
 	head.scale.setScalar( 0.5 );
-	head.position.y = 0.75 + 1;
+	head.position.y = 1 + 1;
 	head.castShadow = true;
 	head.receiveShadow = true;
 	head.material.shadowSide = 2;
@@ -197,7 +197,7 @@ function init() {
 			case 'Space':
 				if ( playerIsOnGround || offGroundTimer > 0 ) {
 
-					playerVelocity.y = 10.0;
+					playerVelocity.y = 20.0;
 					playerIsOnGround = false;
 					offGroundTimer = 0;
 
@@ -227,35 +227,32 @@ function init() {
 function loadColliderEnvironment() {
 
 	new GLTFLoader()
-		.load( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/dungeon-warkarma/scene.gltf', res => {
+		.load( new URL( './models/grandmas_house_compressed.glb', import.meta.url ).toString(), res => {
 
 			const gltfScene = res.scene;
-			gltfScene.scale.setScalar( .01 );
+			gltfScene.scale.setScalar( 1.75 );
 
 			const box = new THREE.Box3();
 			box.setFromObject( gltfScene );
-			box.getCenter( gltfScene.position ).negate();
 			gltfScene.updateMatrixWorld( true );
 
 			// visual geometry setup
+			let toRemove = [];
 			gltfScene.traverse( c => {
 
-				if (
-					/Boss/.test( c.name ) ||
-					/Enemie/.test( c.name ) ||
-					/Shield/.test( c.name ) ||
-					/Sword/.test( c.name ) ||
-					/Character/.test( c.name ) ||
-					/Gate/.test( c.name ) ||
+				if ( /cat/.test( c.name ) || /sheep/.test( c.name ) ) {
 
-					// spears
-					/Cube/.test( c.name ) ||
+					c.traverse( c => {
 
-					// pink brick
-					c.material && c.material.color.r === 1.0
-				) {
+						if ( c.material ) {
 
-					c.visible = false;
+							c.material = c.material.clone();
+							c.material.color.set( 0xff0000 );
+
+						}
+
+					} );
+					toRemove.push( c );
 					return;
 
 				}
@@ -270,8 +267,9 @@ function loadColliderEnvironment() {
 
 			} );
 
-			level = gltfScene;
+			toRemove.forEach( c => c.removeFromParent() );
 
+			level = gltfScene;
 			scene.add( level );
 
 			level.updateMatrixWorld( true );
@@ -282,7 +280,6 @@ function loadColliderEnvironment() {
 			sceneHelper.color.set( 0xffffff );
 			scene.add( sceneHelper );
 
-
 		} );
 
 }
@@ -290,7 +287,7 @@ function loadColliderEnvironment() {
 function reset() {
 
 	playerVelocity.set( 0, 0, 0 );
-	player.position.set( 15.75, - 3, 30 );
+	player.position.set( 8, 10, 2.5 );
 	camera.position.sub( controls.target );
 	controls.target.copy( player.position );
 	camera.position.add( player.position );
@@ -300,9 +297,18 @@ function reset() {
 
 function updatePlayer( delta ) {
 
+	// adjust player position based on collisions
+	player.updateMatrixWorld();
+	invMat.copy( sceneBVH.matrixWorld ).invert();
+
+	// get the position of the capsule in world space
+	const capsuleInfo = player.capsuleInfo;
+	worldSegment.copy( capsuleInfo.segment );
+	worldSegment.applyMatrix4( player.matrixWorld );
+
 	// apply gravity and move the player
-	playerVelocity.y += delta * params.gravity;
-	player.position.addScaledVector( playerVelocity, delta );
+	worldSegment.start.addScaledVector( playerVelocity, delta );
+	worldSegment.end.addScaledVector( playerVelocity, delta );
 
 	// move the player
 	const angle = controls.getAzimuthalAngle();
@@ -335,9 +341,11 @@ function updatePlayer( delta ) {
 
 	}
 
+	// apply walk direction to the collider
 	if ( walkDirection.length() > 0 ) {
 
-		player.position.add( walkDirection );
+		worldSegment.start.add( walkDirection );
+		worldSegment.end.add( walkDirection );
 
 		const right = new THREE.Vector3( 1, 0, 0 );
 		const walkAngle = right.angleTo( walkDirection.normalize() );
@@ -365,27 +373,18 @@ function updatePlayer( delta ) {
 
 	}
 
-
-	player.updateMatrixWorld();
-
-	// adjust player position based on collisions
-	invMat.copy( sceneBVH.matrixWorld ).invert();
-
-	// get the position of the capsule in world space
-	const capsuleInfo = player.capsuleInfo;
-	worldSegment.copy( capsuleInfo.segment );
-	worldSegment.start.applyMatrix4( player.matrixWorld );
-	worldSegment.end.applyMatrix4( player.matrixWorld );
+	playerVelocity.y += delta * params.gravity;
 
 	// get the axis aligned bounding box of the capsule in local scene bvh space
 	sceneLocalBox.makeEmpty();
-	sceneLocalBox.expandByPoint( capsuleInfo.segment.start );
-	sceneLocalBox.expandByPoint( capsuleInfo.segment.end );
+	sceneLocalBox.expandByPoint( worldSegment.start );
+	sceneLocalBox.expandByPoint( worldSegment.end );
 
 	sceneLocalBox.min.addScalar( - capsuleInfo.radius );
 	sceneLocalBox.max.addScalar( capsuleInfo.radius );
-	sceneLocalBox.applyMatrix4( player.matrixWorld ).applyMatrix4( invMat );
+	sceneLocalBox.applyMatrix4( invMat );
 
+	const segmentStart = worldSegment.start.clone();
 	sceneBVH.shapecast( {
 
 		intersectsBounds: box => box.intersectsBox( sceneLocalBox ),
@@ -449,13 +448,15 @@ function updatePlayer( delta ) {
 
 	} );
 
-	// get the adjusted position of the capsule collider in world space after checking
-	// triangle collisions and moving it. capsuleInfo.segment.start is assumed to be
-	// the origin of the player model.
-
-	// check how much the collider was moved
+	// shift the player
 	const deltaVector = tempVector2;
-	deltaVector.copy( capsuleInfo.segment.start ).applyMatrix4( player.matrixWorld );
+	deltaVector.copy( player.capsuleInfo.segment.start ).applyMatrix4( player.matrixWorld );
+	deltaVector.subVectors( worldSegment.start, deltaVector );
+
+	player.position.add( deltaVector );
+
+	// check how much the geometry "pushed" the capsule
+	deltaVector.copy( segmentStart );
 	deltaVector.subVectors( worldSegment.start, deltaVector );
 
 	// if the player was primarily adjusted vertically we assume it's on something we should consider ground
@@ -472,15 +473,8 @@ function updatePlayer( delta ) {
 
 	}
 
-	const offset = Math.max( 0.0, deltaVector.length() - 1e-5 );
-	deltaVector.normalize().multiplyScalar( offset );
+	if ( ! touchingGround ) {
 
-	// adjust the player model
-	player.position.add( deltaVector );
-
-	if ( ! playerIsOnGround ) {
-
-		deltaVector.normalize();
 		playerVelocity.addScaledVector( deltaVector, - deltaVector.dot( playerVelocity ) );
 
 	} else {
@@ -488,6 +482,17 @@ function updatePlayer( delta ) {
 		playerVelocity.set( 0, 0, 0 );
 
 	}
+
+	// if the player has fallen too far below the level reset their position to the start
+	if ( player.position.y < - 5 ) {
+
+		reset();
+
+	}
+
+}
+
+function updateCamera() {
 
 	// adjust the camera
 	camera.position.sub( controls.target );
@@ -517,13 +522,6 @@ function updatePlayer( delta ) {
 	controls.target.add( player.position );
 	camera.position.add( controls.target );
 
-	// if the player has fallen too far below the level reset their position to the start
-	if ( player.position.y < - 25 ) {
-
-		reset();
-
-	}
-
 }
 
 function render() {
@@ -542,7 +540,7 @@ function render() {
 
 		controls.maxPolarAngle = Math.PI / 2;
 		controls.minDistance = 1;
-		controls.maxDistance = 20;
+		controls.maxDistance = 20000;
 
 	}
 
@@ -558,6 +556,8 @@ function render() {
 		}
 
 	}
+
+	updateCamera();
 
 	// TODO: limit the camera movement based on the collider
 	// raycast in direction of camera and move it if it's further than the closest point

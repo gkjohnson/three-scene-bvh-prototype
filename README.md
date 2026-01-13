@@ -6,7 +6,6 @@ A prototype for a generalized Scene BVH implementation to enable efficient spati
 - Adjust or add a new SceneBVHHelper that can include the BVHs of children, as well, by checking "boundsTree".
 - Add support for SkinnedMeshes / MorphTarget meshes
 - Gaussian splat proof of concept
-- Improved / cleaned up demo (use batched mesh, add lag controls)
 
 # Use
 
