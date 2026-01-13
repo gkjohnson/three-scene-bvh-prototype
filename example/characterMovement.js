@@ -20,6 +20,8 @@ const params = {
 
 };
 
+const OFF_GROUND_TIME = 0.05;
+let offGroundTimer = OFF_GROUND_TIME;
 let renderer, camera, scene, clock, gui, stats;
 let level, player, playerMesh, controls, sceneBVH, sceneHelper;
 let playerIsOnGround = false;
@@ -193,10 +195,11 @@ function init() {
 			case 'KeyD': rgtPressed = true; break;
 			case 'KeyA': lftPressed = true; break;
 			case 'Space':
-				if ( playerIsOnGround ) {
+				if ( playerIsOnGround || offGroundTimer > 0 ) {
 
 					playerVelocity.y = 10.0;
 					playerIsOnGround = false;
+					offGroundTimer = 0;
 
 				}
 
@@ -303,16 +306,8 @@ function reset() {
 
 function updatePlayer( delta ) {
 
-	if ( playerIsOnGround ) {
-
-		playerVelocity.y = delta * params.gravity;
-
-	} else {
-
-		playerVelocity.y += delta * params.gravity;
-
-	}
-
+	// apply gravity and move the player
+	playerVelocity.y += delta * params.gravity;
 	player.position.addScaledVector( playerVelocity, delta );
 
 	// move the player
@@ -362,11 +357,10 @@ function updatePlayer( delta ) {
 		playerMesh.position.y = Math.abs( Math.sin( t ) ) * 0.5;
 		playerMesh.rotation.x = Math.sin( t ) * 0.25;
 
-		if ( ! playerIsOnGround ) {
+		if ( offGroundTimer < 0 ) {
 
 			playerMesh.position.y = 0;
 			playerMesh.rotation.x = 0;
-			console.log('GOT')
 
 		}
 
@@ -471,7 +465,18 @@ function updatePlayer( delta ) {
 	deltaVector.subVectors( worldSegment.start, deltaVector );
 
 	// if the player was primarily adjusted vertically we assume it's on something we should consider ground
-	playerIsOnGround = deltaVector.y > Math.abs( delta * playerVelocity.y * 0.25 );
+	const touchingGround = deltaVector.y > Math.abs( delta * playerVelocity.y * 0.25 );
+	if ( touchingGround ) {
+
+		offGroundTimer = OFF_GROUND_TIME;
+		playerIsOnGround = true;
+
+	} else {
+
+		offGroundTimer -= delta;
+		playerIsOnGround = false;
+
+	}
 
 	const offset = Math.max( 0.0, deltaVector.length() - 1e-5 );
 	deltaVector.normalize().multiplyScalar( offset );
