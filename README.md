@@ -2,6 +2,12 @@
 
 A prototype for a generalized Scene BVH implementation to enable efficient spatial queries and raycasting across multiple objects in a scene using three-mesh-bvh. The class includes support for three.js renderable objects, including treating individual InstancedMesh & BatchedMesh instances as separate nodes during queries.
 
+**TODO**
+- Adjust or add a new SceneBVHHelper that can include the BVHs of children, as well, by checking "boundsTree".
+- Add support for SkinnedMeshes / MorphTarget meshes
+- Gaussian splat proof of concept
+- Improved / cleaned up demo (use batched mesh, add lag controls)
+
 # Use
 
 Use the StaticSceneBVH instance directly:
