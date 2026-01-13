@@ -513,9 +513,9 @@ function updatePlayer( delta ) {
 
 		heightOffset = 1.5 - 0.5 * scalar;
 
-	} else if ( heightOffset > 1.5 + 1.5 * scalar ) {
+	} else if ( heightOffset > 1.5 + 1 * scalar ) {
 
-		heightOffset = 1.5 + 1.5 * scalar;
+		heightOffset = 1.5 + 1 * scalar;
 
 	}
 
