@@ -240,6 +240,12 @@ function loadColliderEnvironment() {
 			let toRemove = [];
 			gltfScene.traverse( c => {
 
+				if ( c.material?.isMeshPhysicalMaterial ) {
+
+					c.material.transmission = 0;
+
+				}
+
 				if ( /cat/.test( c.name ) || /sheep/.test( c.name ) ) {
 
 					c.traverse( c => {
