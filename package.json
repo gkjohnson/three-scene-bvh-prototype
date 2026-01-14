@@ -16,7 +16,7 @@
   "module": "src/index.js",
   "scripts": {
 		"start": "vite",
-		"build": "vite build",
+		"build-examples": "vite build --config ./vite.config.js",
 		"lint": "eslint .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
