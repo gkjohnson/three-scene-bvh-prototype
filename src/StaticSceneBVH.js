@@ -322,7 +322,7 @@ export class StaticSceneBVH extends BVH {
 					.copy( object.matrixWorld )
 					.premultiply( _inverseMatrix );
 
-				getPreciseBounds( object.geometry, _matrix, _box );
+				target.setFromObject( object, true ).applyMatrix4( inverseMatrixWorld );
 
 			}
 
@@ -366,15 +366,8 @@ export class StaticSceneBVH extends BVH {
 
 			} else {
 
-				if ( ! object.geometry.boundingBox ) {
-
-					object.geometry.computeBoundingBox();
-
-				}
-
 				target
-					.copy( object.geometry.boundingBox )
-					.applyMatrix4( object.matrixWorld )
+					.setFromObject( object, false )
 					.applyMatrix4( inverseMatrixWorld );
 
 			}
@@ -525,7 +518,8 @@ function getPreciseBounds( geometry, matrix, target ) {
 	const indexAttr = geometry.index;
 	const posAttr = geometry.attributes.position;
 	const start = drawRange.start;
-	const count = Math.min( indexAttr.count - start, drawRange.count );
+	const vertCount = indexAttr ? indexAttr.count : posAttr.count;
+	const count = Math.min( vertCount - start, drawRange.count );
 	for ( let i = start, l = start + count; i < l; i ++ ) {
 
 		let vi = i;
