@@ -55,7 +55,6 @@ function init() {
 
 	// scene setup
 	scene = new THREE.Scene();
-	// scene.fog = new THREE.Fog( bgColor, 20, 70 );
 
 	// lights
 	const light = new THREE.DirectionalLight( 0xffffff, 3 );
@@ -362,8 +361,8 @@ function updatePlayer( delta ) {
 		player.quaternion.slerp( quat, 1 - ( 2 ** ( - delta / 0.05 ) ) );
 
 		const t = window.performance.now() * 0.025;
-		playerMesh.position.y = Math.abs( Math.sin( t ) ) * 0.5;
-		playerMesh.rotation.x = Math.sin( t ) * 0.25;
+		playerMesh.position.y = Math.abs( Math.sin( t ) ) * 0.6;
+		playerMesh.rotation.x = Math.sin( t ) * 0.3;
 
 		if ( offGroundTimer < 0 ) {
 
