@@ -1,6 +1,6 @@
 # three-scene-bvh-prototype
 
-A prototype for a generalized Scene BVH implementation to enable efficient spatial queries and raycasting across multiple objects in a scene using three-mesh-bvh. The class includes support for three.js renderable objects, including treating individual InstancedMesh & BatchedMesh instances as separate nodes during queries.
+A prototype for a generalized Scene BVH implementation to enable efficient spatial queries and raycasting across multiple objects in a scene using three-mesh-bvh to possibly be included in the project. The class includes support for three.js renderable objects, including treating individual InstancedMesh & BatchedMesh instances as separate nodes during queries.
 
 **Demos**
 
