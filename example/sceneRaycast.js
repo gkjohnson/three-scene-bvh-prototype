@@ -29,7 +29,7 @@ const params = {
 };
 
 let renderer, scene, camera, controls, stats;
-let sphereContainer, sceneBVH, bvhHelper;
+let container, sceneBVH, bvhHelper;
 let raycaster, mouse, highlightMesh;
 let lastTime = performance.now();
 let infoElement;
@@ -72,8 +72,8 @@ function init() {
 	controls.enableDamping = true;
 
 	// Container for all spheres
-	sphereContainer = new THREE.Group();
-	scene.add( sphereContainer );
+	container = new THREE.Group();
+	scene.add( container );
 
 	// Raycaster
 	raycaster = new THREE.Raycaster();
@@ -144,9 +144,9 @@ function init() {
 function createSpheres() {
 
 	// Clear existing content
-	while ( sphereContainer.children.length ) {
+	while ( container.children.length ) {
 
-		const child = sphereContainer.children[ 0 ];
+		const child = container.children[ 0 ];
 		child.material.dispose();
 		child.geometry.dispose();
 
@@ -156,7 +156,7 @@ function createSpheres() {
 
 		}
 
-		sphereContainer.remove( child );
+		container.remove( child );
 
 	}
 
@@ -219,7 +219,7 @@ function createSpheres() {
 			getRandomTransform( mesh.matrix );
 			mesh.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale );
 
-			sphereContainer.add( mesh );
+			container.add( mesh );
 
 		}
 
@@ -244,7 +244,7 @@ function createSpheres() {
 
 			}
 
-			sphereContainer.add( instancedMesh );
+			container.add( instancedMesh );
 
 		} );
 
@@ -275,7 +275,7 @@ function createSpheres() {
 
 		}
 
-		sphereContainer.add( batchedMesh );
+		container.add( batchedMesh );
 
 	}
 
@@ -301,7 +301,7 @@ function updateBVH() {
 	// Dispose existing BVH
 	if ( sceneBVH ) {
 
-		sphereContainer.disposeSceneBoundsTree();
+		container.disposeSceneBoundsTree();
 		sceneBVH = null;
 
 		bvhHelper.dispose();
@@ -315,19 +315,19 @@ function updateBVH() {
 	if ( params.bvh.enabled ) {
 
 		console.time( 'Building Scene BVH' );
-		sphereContainer.updateMatrixWorld();
+		container.updateMatrixWorld();
 
-		sphereContainer.computeSceneBoundsTree( {
+		container.computeSceneBoundsTree( {
 			strategy: params.bvh.strategy,
 			precise: params.bvh.precise,
 			includeInstances: params.bvh.includeInstances,
-			maxLeafSize: 1,
 		} );
-		sphereContainer.raycast = acceleratedSceneRaycast;
-		sceneBVH = sphereContainer.sceneBoundsTree;
+
+		container.raycast = acceleratedSceneRaycast;
+		sceneBVH = container.sceneBoundsTree;
 		console.timeEnd( 'Building Scene BVH' );
 
-		bvhHelper = new MeshBVHHelper( sphereContainer, sphereContainer.sceneBoundsTree, params.bvh.depth );
+		bvhHelper = new MeshBVHHelper( container, container.sceneBoundsTree, params.bvh.depth );
 		bvhHelper.color.set( 0xffffff );
 		bvhHelper.opacity = 0.5;
 		bvhHelper.displayParents = params.bvh.displayParents;
@@ -369,7 +369,7 @@ function performRaycast() {
 
 	// Raycast using Scene BVH if enabled
 	const startTime = performance.now();
-	intersects = raycaster.intersectObject( sphereContainer, true );
+	intersects = raycaster.intersectObject( container, true );
 	raycastTime = performance.now() - startTime;
 	infoElement.innerText = `${ raycastTime.toFixed( 3 ) }ms`;
 
@@ -405,7 +405,7 @@ function render() {
 
 	if ( params.animate ) {
 
-		sphereContainer.rotation.y += ( performance.now() - lastTime ) * 1e-4 * 0.5;
+		container.rotation.y += ( performance.now() - lastTime ) * 1e-4 * 0.5;
 
 	}
 

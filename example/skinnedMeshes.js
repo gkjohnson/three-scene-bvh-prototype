@@ -21,7 +21,7 @@ const params = {
 const characterCount = 50;
 
 let renderer, scene, camera, controls, stats;
-let characterContainer;
+let container;
 let characterMixers = [];
 let clock;
 let characterModel, danceAnimation;
@@ -59,8 +59,8 @@ function init() {
 	controls.enableDamping = true;
 
 	// Container for all characters
-	characterContainer = new THREE.Group();
-	scene.add( characterContainer );
+	container = new THREE.Group();
+	scene.add( container );
 
 	// Clock for animations
 	clock = new THREE.Clock();
@@ -152,7 +152,7 @@ function initCharacters() {
 
 		// Random rotation
 		character.rotation.y = Math.random() * Math.PI * 2;
-		characterContainer.add( character );
+		container.add( character );
 
 		// Setup animation mixer with dance animation
 		const mixer = new THREE.AnimationMixer( character );
@@ -169,22 +169,26 @@ function initCharacters() {
 
 	}
 
-	updateBVH();
+	container.updateMatrixWorld( true );
+
+	sceneBVH = new StaticSceneBVH( container, {
+		maxLeafSize: 1,
+		precise: params.bvh.precise,
+	} );
+
+	bvhHelper = new BVHHelper( container, sceneBVH, params.bvh.depth );
+	bvhHelper.color.set( 0xffffff );
+	bvhHelper.displayParents = params.bvh.displayParents;
+	bvhHelper.update();
+	scene.add( bvhHelper );
 
 }
 
 function updateBVH() {
 
-	// Dispose existing BVH
-	if ( bvhHelper ) {
+	container.updateMatrixWorld( true );
 
-		bvhHelper.dispose();
-		scene.remove( bvhHelper );
-
-	}
-
-	// Clear bounding boxes of all skinned meshes so they regenerate
-	characterContainer.traverse( child => {
+	container.traverse( child => {
 
 		if ( child.isSkinnedMesh ) {
 
@@ -196,20 +200,15 @@ function updateBVH() {
 
 	} );
 
-	console.time( 'Building Scene BVH' );
-	characterContainer.updateMatrixWorld( true );
+	console.time( 'Refitting Scene BVH' );
+	container.updateMatrixWorld( true );
+	sceneBVH.precise = params.bvh.precise;
+	sceneBVH.refit();
+	console.timeEnd( 'Refitting Scene BVH' );
 
-	sceneBVH = new StaticSceneBVH( characterContainer, {
-		maxLeafSize: 1,
-		precise: params.bvh.precise,
-	} );
-	console.timeEnd( 'Building Scene BVH' );
-
-	bvhHelper = new BVHHelper( characterContainer, sceneBVH, params.bvh.depth );
-	bvhHelper.color.set( 0xffffff );
-	bvhHelper.displayParents = params.bvh.displayParents;
+	bvhHelper.bvh = sceneBVH;
 	bvhHelper.update();
-	scene.add( bvhHelper );
+
 
 }
 

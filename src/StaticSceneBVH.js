@@ -1,15 +1,11 @@
 import { Box3, BufferGeometry, Matrix4, Mesh, Vector3, Ray } from 'three';
 import { BVH, INTERSECTED, NOT_INTERSECTED } from 'three-mesh-bvh';
 
-const FLOAT32_EPSILON = Math.pow( 2, - 24 );
-
 const _geometry = /* @__PURE__ */ new BufferGeometry();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
 const _box = /* @__PURE__ */ new Box3();
 const _vec = /* @__PURE__ */ new Vector3();
-const _center = /* @__PURE__ */ new Vector3();
-const _size = /* @__PURE__ */ new Vector3();
 const _ray = /* @__PURE__ */ new Ray();
 const _mesh = /* @__PURE__ */ new Mesh();
 const _geometryRange = {};
@@ -66,35 +62,20 @@ export class StaticSceneBVH extends BVH {
 
 	}
 
-	computePrimitiveBounds( offset, count, targetBuffer ) {
+	writePrimitiveBounds( i, targetBuffer, writeOffset ) {
 
 		const { primitiveBuffer } = this;
-		const boundsOffset = targetBuffer.offset || 0;
-
 		_inverseMatrix.copy( this.matrixWorld ).invert();
-		for ( let i = offset; i < count; i ++ ) {
 
-			this._getPrimitiveBoundingBox( primitiveBuffer[ i ], _inverseMatrix, _box );
+		this._getPrimitiveBoundingBox( primitiveBuffer[ i ], _inverseMatrix, _box );
+		const { min, max } = _box;
 
-			_box.getCenter( _center );
-			_box.getSize( _size );
-
-			const { x, y, z } = _center;
-			const hx = _size.x / 2;
-			const hy = _size.y / 2;
-			const hz = _size.z / 2;
-
-			const baseIndex = ( i - boundsOffset ) * 6;
-			targetBuffer[ baseIndex + 0 ] = x;
-			targetBuffer[ baseIndex + 1 ] = hx + Math.abs( x ) * FLOAT32_EPSILON;
-			targetBuffer[ baseIndex + 2 ] = y;
-			targetBuffer[ baseIndex + 3 ] = hy + Math.abs( y ) * FLOAT32_EPSILON;
-			targetBuffer[ baseIndex + 4 ] = z;
-			targetBuffer[ baseIndex + 5 ] = hz + Math.abs( z ) * FLOAT32_EPSILON;
-
-		}
-
-		return targetBuffer;
+		targetBuffer[ writeOffset + 0 ] = min.x;
+		targetBuffer[ writeOffset + 1 ] = min.y;
+		targetBuffer[ writeOffset + 2 ] = min.z;
+		targetBuffer[ writeOffset + 3 ] = max.x;
+		targetBuffer[ writeOffset + 4 ] = max.y;
+		targetBuffer[ writeOffset + 5 ] = max.z;
 
 	}
 
