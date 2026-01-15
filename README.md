@@ -1,6 +1,6 @@
 # three-scene-bvh-prototype
 
-A prototype for a generalized Scene BVH implementation to enable efficient spatial queries and raycasting across multiple objects in a scene using three-mesh-bvh. The class includes support for three.js renderable objects, including treating individual InstancedMesh & BatchedMesh instances as separate nodes during queries.
+A prototype for a generalized Scene BVH implementation to enable efficient spatial queries and raycasting across multiple objects in a scene using three-mesh-bvh to possibly be included in the project. The class includes support for three.js renderable objects, including treating individual InstancedMesh & BatchedMesh instances as separate nodes during queries.
 
 **Demos**
 
@@ -8,9 +8,6 @@ A prototype for a generalized Scene BVH implementation to enable efficient spati
 - [Character Physics Demo](https://gkjohnson.github.io/three-scene-bvh-prototype/example/bundle/characterMovement.html)
 - [SkinnedMesh support](https://gkjohnson.github.io/three-scene-bvh-prototype/example/bundle/skinnedMeshes.html)
 - [Frustum Culling Demo](https://gkjohnson.github.io/three-scene-bvh-prototype/example/bundle/skinnedMeshes.html)
-
-**TODO**
-- Adjust or add a new SceneBVHHelper that can include the BVHs of children, as well, by checking "boundsTree".
 
 # Use
 
