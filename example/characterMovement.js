@@ -21,6 +21,7 @@ const params = {
 };
 
 const OFF_GROUND_TIME = 0.05;
+const WALK_CYCLE_TIME = 2 * Math.PI;
 let offGroundTimer = OFF_GROUND_TIME;
 let renderer, camera, scene, clock, gui, stats;
 let level, player, playerMesh, controls, sceneBVH, sceneHelper;
@@ -36,6 +37,7 @@ let invMat = new THREE.Matrix4();
 let worldSegment = new THREE.Line3();
 let localSegment = new THREE.Line3();
 let sphere = new THREE.Sphere();
+let walkAnimation = 0;
 
 init();
 render();
@@ -62,7 +64,7 @@ function init() {
 	light.shadow.mapSize.setScalar( 2048 );
 	light.shadow.bias = - 1e-4;
 	light.shadow.normalBias = 0.05;
-	light.shadow.radius = 5;
+	light.shadow.radius = 3;
 	light.castShadow = true;
 
 	const shadowCam = light.shadow.camera;
@@ -346,6 +348,23 @@ function updatePlayer( delta ) {
 
 	}
 
+	const animationStep = delta * 25;
+	walkAnimation -= animationStep;
+
+	if ( walkAnimation < 0 ) {
+
+		walkAnimation += WALK_CYCLE_TIME;
+
+	}
+
+	const cycle = ( walkAnimation / Math.PI ) % 1;
+	const animationOnGround = Math.abs( cycle ) < 2 * animationStep / Math.PI || Math.abs( 1 - cycle ) < 2 * animationStep / Math.PI;
+	if ( offGroundTimer < 0 && animationOnGround ) {
+
+		walkAnimation = Math.round( walkAnimation / Math.PI ) * Math.PI;
+
+	}
+
 	// apply walk direction to the collider
 	if ( walkDirection.length() > 0 ) {
 
@@ -360,23 +379,22 @@ function updatePlayer( delta ) {
 		const quat = new THREE.Quaternion().setFromAxisAngle( right.set( 0, 1, 0 ), sign * walkAngle );
 		player.quaternion.slerp( quat, 1 - ( 2 ** ( - delta / 0.05 ) ) );
 
-		const t = window.performance.now() * 0.025;
-		playerMesh.position.y = Math.abs( Math.sin( t ) ) * 0.6;
-		playerMesh.rotation.x = Math.sin( t ) * 0.3;
+	} else {
 
-		if ( offGroundTimer < 0 ) {
+		if ( animationOnGround ) {
 
-			playerMesh.position.y = 0;
-			playerMesh.rotation.x = 0;
+			walkAnimation = Math.round( walkAnimation / Math.PI ) * Math.PI;
 
 		}
 
-	} else {
-
-		playerMesh.position.y = 0;
-		playerMesh.rotation.x = 0;
-
 	}
+
+	playerMesh.position.y = Math.abs( Math.sin( walkAnimation ) ) * 0.6;
+	playerMesh.rotation.x = Math.sin( walkAnimation ) * 0.3;
+
+
+
+
 
 	playerVelocity.y += delta * params.gravity;
 
