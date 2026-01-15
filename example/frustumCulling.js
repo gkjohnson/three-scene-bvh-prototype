@@ -26,7 +26,7 @@ const params = {
 };
 
 let renderer, scene, camera, controls, stats;
-let container, sceneBVH, bvhHelper;
+let sceneBVH, bvhHelper;
 let batchedMesh;
 let lastTime = performance.now();
 let infoElement;
@@ -67,11 +67,6 @@ function init() {
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.enablePan = false;
 	controls.enableDamping = true;
-
-	// Container for all objects
-	// TODO: remove container
-	container = new THREE.Group();
-	scene.add( container );
 
 	// Stats
 	stats = new Stats();
@@ -135,7 +130,7 @@ function updateVisible() {
 	const frustum = new THREE.Frustum();
 	frustumMatrix
 		.multiplyMatrices( camera.projectionMatrix, camera.matrixWorldInverse )
-		.multiply( container.matrixWorld );
+		.multiply( batchedMesh.matrixWorld );
 	frustum.setFromProjectionMatrix(
 		frustumMatrix,
 		camera.coordinateSystem,
@@ -189,23 +184,6 @@ function updateVisible() {
 
 function createSpheres() {
 
-	// Clear existing content
-	while ( container.children.length ) {
-
-		const child = container.children[ 0 ];
-		child.material.dispose();
-		child.geometry.dispose();
-
-		if ( child.dispose ) {
-
-			child.dispose();
-
-		}
-
-		container.remove( child );
-
-	}
-
 	const count = 500000;
 	const geometries = [
 		new THREE.TorusGeometry( 0.25, 0.1, 30, 30 ),
@@ -250,12 +228,50 @@ function createSpheres() {
 
 	}
 
-	container.add( batchedMesh );
+	scene.add( batchedMesh );
+	scene.updateMatrixWorld();
 
 	// Create new BVH
-	sceneBVH = new StaticSceneBVH( container );
+	sceneBVH = new StaticSceneBVH( batchedMesh );
+	bvhHelper = new MeshBVHHelper( batchedMesh, sceneBVH, params.bvh.depth );
 
-	bvhHelper = new MeshBVHHelper( container, sceneBVH, params.bvh.depth );
+	// replacing the default matrix update since there is special handling for batched mesh indices
+	// TODO: fix this in three-mesh-bvh
+	bvhHelper.updateMatrixWorld = function ( ...args ) {
+
+		const mesh = this.mesh;
+		const parent = this.parent;
+
+		if ( mesh !== null ) {
+
+			mesh.updateWorldMatrix( true, false );
+
+			if ( parent ) {
+
+				this.matrix
+					.copy( parent.matrixWorld )
+					.invert()
+					.multiply( mesh.matrixWorld );
+
+			} else {
+
+				this.matrix
+					.copy( mesh.matrixWorld );
+
+			}
+
+			this.matrix.decompose(
+				this.position,
+				this.quaternion,
+				this.scale,
+			);
+
+		}
+
+		THREE.Object3D.prototype.updateMatrixWorld.call( this, ...args );
+
+	};
+
 	bvhHelper.color.set( 0xffffff );
 	bvhHelper.opacity = 0.5;
 	bvhHelper.displayParents = params.bvh.displayParents;
@@ -303,7 +319,7 @@ function render() {
 
 	if ( params.animate ) {
 
-		container.rotation.y += ( performance.now() - lastTime ) * 1e-4 * 0.5;
+		batchedMesh.rotation.y += ( performance.now() - lastTime ) * 1e-4 * 0.5;
 
 	}
 
