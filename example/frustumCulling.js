@@ -211,7 +211,7 @@ function createSpheres() {
 		new THREE.TorusGeometry( 0.25, 0.1, 30, 30 ),
 		new THREE.SphereGeometry( 0.25, 30, 30 ),
 		new THREE.ConeGeometry( 0.25, 0.25 ),
-		mergeVertices( new RoundedBoxGeometry( 0.25, 0.25, 0.5, 2, 1 ) ),
+		mergeVertices( new RoundedBoxGeometry( 0.25, 0.25, 0.5, 4, 1 ) ),
 	];
 
 	const colors = [
