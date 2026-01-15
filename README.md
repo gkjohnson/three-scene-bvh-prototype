@@ -9,9 +9,6 @@ A prototype for a generalized Scene BVH implementation to enable efficient spati
 - [SkinnedMesh support](https://gkjohnson.github.io/three-scene-bvh-prototype/example/bundle/skinnedMeshes.html)
 - [Frustum Culling Demo](https://gkjohnson.github.io/three-scene-bvh-prototype/example/bundle/skinnedMeshes.html)
 
-**TODO**
-- Adjust or add a new SceneBVHHelper that can include the BVHs of children, as well, by checking "boundsTree".
-
 # Use
 
 Use the StaticSceneBVH instance directly:
