@@ -11,6 +11,7 @@ A prototype for a generalized Scene BVH implementation to enable efficient spati
 **TODO**
 - Adjust or add a new SceneBVHHelper that can include the BVHs of children, as well, by checking "boundsTree".
 - Gaussian splat proof of concept
+- Passing BatchedMesh (or possible InstancedMesh) directly into the BVH constructor causes issues
 
 # Use
 
