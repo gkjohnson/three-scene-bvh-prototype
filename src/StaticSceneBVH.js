@@ -1,10 +1,11 @@
-import { Box3, BufferGeometry, Matrix4, Mesh, Vector3, Ray } from 'three';
+import { Box3, BufferGeometry, Matrix4, Mesh, Vector3, Ray, Sphere } from 'three';
 import { BVH, INTERSECTED, NOT_INTERSECTED } from 'three-mesh-bvh';
 
 const _geometry = /* @__PURE__ */ new BufferGeometry();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
 const _box = /* @__PURE__ */ new Box3();
+const _sphere = /* @__PURE__ */ new Sphere();
 const _vec = /* @__PURE__ */ new Vector3();
 const _ray = /* @__PURE__ */ new Ray();
 const _mesh = /* @__PURE__ */ new Mesh();
@@ -256,13 +257,25 @@ export class StaticSceneBVH extends BVH {
 
 			}
 
+			if ( ! object.boundingSphere ) {
+
+				object.computeBoundingSphere();
+
+			}
+
 			_matrix
 				.copy( object.matrixWorld )
-				.premultiply( _inverseMatrix );
+				.premultiply( inverseMatrixWorld );
 
-			_box
+			_sphere
+				.copy( object.boundingSphere )
+				.applyMatrix4( _matrix );
+
+			target
 				.copy( object.boundingBox )
 				.applyMatrix4( _matrix );
+
+			shrinkToSphere( target, _sphere );
 
 		} else if ( precise ) {
 
@@ -277,7 +290,7 @@ export class StaticSceneBVH extends BVH {
 					.premultiply( object.matrixWorld )
 					.premultiply( inverseMatrixWorld );
 
-				getPreciseBounds( object.geometry, _matrix, _box );
+				getPreciseBounds( object.geometry, _matrix, target );
 
 			} else if ( object.isBatchedMesh ) {
 
@@ -295,13 +308,13 @@ export class StaticSceneBVH extends BVH {
 					.premultiply( object.matrixWorld )
 					.premultiply( inverseMatrixWorld );
 
-				getPreciseBounds( _geometry, _matrix, _box );
+				getPreciseBounds( _geometry, _matrix, target );
 
 			} else {
 
 				_matrix
 					.copy( object.matrixWorld )
-					.premultiply( _inverseMatrix );
+					.premultiply( inverseMatrixWorld );
 
 				target.setFromObject( object, true ).applyMatrix4( inverseMatrixWorld );
 
@@ -319,6 +332,12 @@ export class StaticSceneBVH extends BVH {
 
 				}
 
+				if ( ! object.geometry.boundingSphere ) {
+
+					object.geometry.computeBoundingSphere();
+
+				}
+
 				object
 					.getMatrixAt( instanceId, _matrix );
 
@@ -326,9 +345,15 @@ export class StaticSceneBVH extends BVH {
 					.premultiply( object.matrixWorld )
 					.premultiply( inverseMatrixWorld );
 
+				_sphere
+					.copy( object.geometry.boundingSphere )
+					.applyMatrix4( _matrix );
+
 				target
 					.copy( object.geometry.boundingBox )
 					.applyMatrix4( _matrix );
+
+				shrinkToSphere( target, _sphere );
 
 			} else if ( object.isBatchedMesh ) {
 
@@ -342,8 +367,14 @@ export class StaticSceneBVH extends BVH {
 					.premultiply( inverseMatrixWorld );
 
 				object
+					.getBoundingSphereAt( geometryId, _sphere )
+					.applyMatrix4( _matrix );
+
+				object
 					.getBoundingBoxAt( geometryId, target )
 					.applyMatrix4( _matrix );
+
+				shrinkToSphere( target, _sphere );
 
 			} else {
 
@@ -538,5 +569,15 @@ function iterateOverObjects( offset, count, bvh, callback, contained, depth, /* 
 	}
 
 	return false;
+
+}
+
+function shrinkToSphere( box, sphere ) {
+
+	_vec.copy( sphere.center ).addScalar( - sphere.radius );
+	box.min.min( _vec );
+
+	_vec.copy( sphere.center ).addScalar( sphere.radius );
+	box.max.max( _vec );
 
 }
