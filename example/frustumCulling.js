@@ -22,6 +22,7 @@ const params = {
 	},
 	frustumCulling: {
 		useBVH: true,
+		checkBoundingSphere: false,
 	},
 };
 
@@ -29,14 +30,14 @@ let renderer, scene, camera, controls, stats;
 let sceneBVH, bvhHelper;
 let batchedMesh;
 let lastTime = performance.now();
-let infoElement;
+let statsElement;
 
 init();
 createSpheres();
 
 function init() {
 
-	infoElement = document.getElementById( 'info' );
+	statsElement = document.getElementById( 'stats' );
 
 	// Renderer setup
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -101,6 +102,7 @@ function init() {
 
 	const frustumFolder = gui.addFolder( 'Frustum Culling' );
 	frustumFolder.add( params.frustumCulling, 'useBVH' );
+	frustumFolder.add( params.frustumCulling, 'checkBoundingSphere' );
 
 	// Event listeners
 	window.addEventListener( 'resize', onWindowResize, false );
@@ -126,8 +128,12 @@ function updateVisible() {
 	camera.updateMatrixWorld();
 
 	// get the frustum
+	const checkBoundingSphere = params.frustumCulling.checkBoundingSphere;
 	const frustumMatrix = new THREE.Matrix4();
+	const matrix = new THREE.Matrix4();
+	const invMatrix = new THREE.Matrix4();
 	const frustum = new THREE.Frustum();
+	const sphere = new THREE.Sphere();
 	frustumMatrix
 		.multiplyMatrices( camera.projectionMatrix, camera.matrixWorldInverse )
 		.multiply( batchedMesh.matrixWorld );
@@ -138,6 +144,7 @@ function updateVisible() {
 	);
 
 	const point = new THREE.Vector3();
+	invMatrix.copy( sceneBVH.matrixWorld ).invert();
 	sceneBVH.shapecast( {
 		intersectsBounds: box => {
 
@@ -175,7 +182,31 @@ function updateVisible() {
 		},
 		intersectsObject: ( object, instanceId ) => {
 
-			object.setVisibleAt( instanceId, true );
+			if ( checkBoundingSphere ) {
+
+				// check bounding sphere intersection
+				// this lowers the number of bounds on screen compared to the bounding boxes
+				// but incurs overhead
+				const geometryId = object.getGeometryIdAt( instanceId );
+				object.getMatrixAt( instanceId, matrix );
+				matrix
+					.premultiply( object.matrixWorld )
+					.premultiply( invMatrix );
+
+				object.getBoundingSphereAt( geometryId, sphere );
+				sphere.applyMatrix4( matrix );
+
+				if ( frustum.intersectsSphere( sphere ) ) {
+
+					object.setVisibleAt( instanceId, true );
+
+				}
+
+			} else {
+
+				object.setVisibleAt( instanceId, true );
+
+			}
 
 		},
 	} );
@@ -330,7 +361,7 @@ function render() {
 	renderer.render( scene, camera );
 	const delta = performance.now() - start;
 
-	infoElement.innerText =
+	statsElement.innerText =
 		`render time: ${ delta.toFixed( 2 ) }ms\n` +
 		`visible: ${ batchedMesh._multiDrawCount }`;
 

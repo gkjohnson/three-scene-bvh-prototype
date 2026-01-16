@@ -17,7 +17,7 @@
             height: 100%;
         }
 
-        #info {
+        #stats {
             position: absolute;
             bottom: 0;
             left: 0;
@@ -26,10 +26,23 @@
             font-size: 12px;
             pointer-events: none;
         }
+
+		#info {
+			position: absolute;
+			top: 0;
+			width: 100%;
+			color: white;
+			font-family: monospace;
+			text-align: center;
+			padding: 5px 0;
+		}
     </style>
 </head>
 <body>
-    <div id="info"></div>
+	<div id="info">
+		Comparison of using StaticSceneBVH for frustum culling vs built in BatchedMesh frustum culling.
+	</div>
+	<div id="stats"></div>
     <script type="module" src="./frustumCulling.js"></script>
 </body>
 </html>

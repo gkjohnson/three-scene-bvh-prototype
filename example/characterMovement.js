@@ -77,7 +77,7 @@ function init() {
 
 	// camera setup
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 50 );
-	camera.position.set( 10, 10, - 10 );
+	camera.position.set( 10, 5, 10 ).multiplyScalar( 1.5 );
 	camera.far = 100;
 	camera.updateProjectionMatrix();
 	window.camera = camera;
