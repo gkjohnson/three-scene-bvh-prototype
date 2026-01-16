@@ -5,64 +5,62 @@ import Stats from 'stats.js';
 import { AVERAGE, CENTER, MeshBVHHelper, SAH } from 'three-mesh-bvh';
 import { computeSceneBoundsTree, disposeSceneBoundsTree, acceleratedSceneRaycast } from '../src/ExtensionUtilities.js';
 
-// Extend Three.js Object3D prototype with scene BVH methods
+// Extend Three.js Object3D prototype
 THREE.Object3D.prototype.computeSceneBoundsTree = computeSceneBoundsTree;
 THREE.Object3D.prototype.disposeSceneBoundsTree = disposeSceneBoundsTree;
 
-const bgColor = 0x131619;
 const params = {
+	// Scene
 	mode: 'batched',
 	animate: true,
-	bvh: {
-		enabled: true,
-		strategy: CENTER,
-		precise: false,
-		includeInstances: true,
 
-		visualize: false,
-		depth: 15,
-		displayParents: false,
-	},
-	raycast: {
-		firstHitOnly: true,
-	},
+	// BVH
+	useBVH: true,
+	strategy: CENTER,
+	precise: false,
+	includeInstances: true,
+
+	// Visualization
+	showHelper: false,
+	helperDepth: 15,
+	helperParents: false,
+
+	// Raycast
+	firstHitOnly: true,
 };
 
 let renderer, scene, camera, controls, stats;
-let container, sceneBVH, bvhHelper;
+let container, bvhHelper;
 let raycaster, mouse, highlightMesh;
-let lastTime = performance.now();
 let infoElement;
 
 init();
-updateFromOptions();
+rebuild();
 
 function init() {
 
 	infoElement = document.getElementById( 'info' );
 
-	// Renderer setup
+	// Renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.setPixelRatio( window.devicePixelRatio );
 	renderer.setSize( window.innerWidth, window.innerHeight );
-	renderer.setClearColor( bgColor, 1 );
+	renderer.setClearColor( 0x131619, 1 );
 	renderer.setAnimationLoop( render );
 	document.body.appendChild( renderer.domElement );
 
-	// Scene setup
+	// Scene
 	scene = new THREE.Scene();
-	scene.fog = new THREE.Fog( bgColor, 0, 10 );
+	scene.fog = new THREE.Fog( 0x131619, 0, 10 );
 
 	// Lights
-	const light = new THREE.DirectionalLight( 0xffffff, 2.5 );
-	light.position.set( 1, 2, 1 );
+	const light1 = new THREE.DirectionalLight( 0xffffff, 2.5 );
+	light1.position.set( 1, 2, 1 );
+	const light2 = new THREE.DirectionalLight( 0xffffff, 0.75 );
+	light2.position.set( - 1, - 2, - 1 );
+	scene.add( light1, light2, new THREE.AmbientLight( 0xffffff, 0.75 ) );
 
-	const revLight = new THREE.DirectionalLight( 0xffffff, 0.75 );
-	revLight.position.set( 1, 2, 1 ).multiplyScalar( - 1 );
-	scene.add( light, revLight );
-	scene.add( new THREE.AmbientLight( 0xffffff, .75 ) );
-
-	// Camera setup
+	// Camera
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 200 );
 	camera.position.set( 18, 10, 0 );
 
@@ -71,22 +69,19 @@ function init() {
 	controls.enablePan = false;
 	controls.enableDamping = true;
 
-	// Container for all spheres
+	// Container
 	container = new THREE.Group();
 	scene.add( container );
 
 	// Raycaster
 	raycaster = new THREE.Raycaster();
-	raycaster.firstHitOnly = params.raycast.firstHitOnly;
 	mouse = new THREE.Vector2();
 
 	// Highlight sphere
-	highlightMesh = new THREE.Mesh( new THREE.SphereGeometry( 0.1, 16, 16 ), new THREE.MeshBasicMaterial( {
-		color: 0xffff00,
-		transparent: true,
-		opacity: 0.75,
-		fog: false,
-	} ) );
+	highlightMesh = new THREE.Mesh(
+		new THREE.SphereGeometry( 0.1, 16, 16 ),
+		new THREE.MeshBasicMaterial( { color: 0xffff00, transparent: true, opacity: 0.75, fog: false } )
+	);
 	highlightMesh.visible = false;
 	scene.add( highlightMesh );
 
@@ -95,296 +90,185 @@ function init() {
 	document.body.appendChild( stats.dom );
 
 	// GUI
-	const gui = new GUI();
+	setupGUI();
 
-	gui.add( params, 'mode', [ 'group', 'instanced', 'batched', 'mix' ] ).onChange( updateFromOptions );
-	gui.add( params, 'animate' );
+	// Events
+	window.addEventListener( 'resize', () => {
 
-	const bvhFolder = gui.addFolder( 'Scene BVH' );
-	bvhFolder.add( params.bvh, 'enabled' ).onChange( updateBVH );
-	bvhFolder.add( params.bvh, 'strategy', { CENTER, AVERAGE, SAH } ).onChange( updateBVH );
-	bvhFolder.add( params.bvh, 'precise' ).onChange( updateBVH );
-	bvhFolder.add( params.bvh, 'includeInstances' ).onChange( updateBVH );
-
-	const helperFolder = gui.addFolder( 'BVH Helper' );
-	helperFolder.add( params.bvh, 'visualize' ).name( 'enabled' );
-	helperFolder.add( params.bvh, 'displayParents' ).onChange( v => {
-
-		if ( bvhHelper ) {
-
-			bvhHelper.displayParents = v;
-			bvhHelper.update();
-
-		}
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		renderer.setSize( window.innerWidth, window.innerHeight );
 
 	} );
-	helperFolder.add( params.bvh, 'depth' ).min( 1 ).max( 20 ).step( 1 ).onChange( v => {
 
-		if ( bvhHelper ) {
+	window.addEventListener( 'pointermove', e => {
 
-			bvhHelper.depth = v;
-			bvhHelper.update();
-
-		}
+		mouse.x = ( e.clientX / window.innerWidth ) * 2 - 1;
+		mouse.y = - ( e.clientY / window.innerHeight ) * 2 + 1;
 
 	} );
-	bvhFolder.add( params.raycast, 'firstHitOnly' ).onChange( () => {
-
-		raycaster.firstHitOnly = params.raycast.firstHitOnly;
-
-	} );
-	bvhFolder.open();
-
-	// Event listeners
-	window.addEventListener( 'resize', onWindowResize, false );
-	window.addEventListener( 'pointermove', onPointerMove, false );
 
 }
 
-function createSpheres() {
+function setupGUI() {
 
-	// Clear existing content
-	while ( container.children.length ) {
+	const gui = new GUI();
 
-		const child = container.children[ 0 ];
-		child.material.dispose();
-		child.geometry.dispose();
+	gui.add( params, 'mode', [ 'group', 'instanced', 'batched', 'mix' ] ).onChange( rebuild );
+	gui.add( params, 'animate' );
 
-		if ( child.dispose ) {
+	const bvhFolder = gui.addFolder( 'BVH' );
+	bvhFolder.add( params, 'useBVH' ).onChange( rebuildBVH );
+	bvhFolder.add( params, 'strategy', { CENTER, AVERAGE, SAH } ).onChange( rebuildBVH );
+	bvhFolder.add( params, 'precise' ).onChange( rebuildBVH );
+	bvhFolder.add( params, 'includeInstances' ).onChange( rebuildBVH );
+	bvhFolder.add( params, 'firstHitOnly' ).onChange( () => raycaster.firstHitOnly = params.firstHitOnly );
+	bvhFolder.open();
 
-			child.dispose();
+	const helperFolder = gui.addFolder( 'Helper' );
+	helperFolder.add( params, 'showHelper' );
+	helperFolder.add( params, 'helperDepth', 1, 20, 1 );
+	helperFolder.add( params, 'helperParents' );
 
-		}
+}
 
-		container.remove( child );
+function createObjects() {
 
-	}
+	// Clear container
+	disposeGroup( container );
 
-	const count = 10000;
+	const COUNT = 10000;
 	const geometries = [
 		new THREE.TorusGeometry( 0.25, 0.1, 30, 30 ),
 		new THREE.SphereGeometry( 0.25, 30, 30 ),
 	];
+	const colors = [ 0xE91E63, 0x03A9F4, 0x4CAF50, 0xFFC107, 0x9C27B0 ].map( c => new THREE.Color( c ) );
 
-	const colors = [
-		new THREE.Color( 0xE91E63 ),
-		new THREE.Color( 0x03A9F4 ),
-		new THREE.Color( 0x4CAF50 ),
-		new THREE.Color( 0xFFC107 ),
-		new THREE.Color( 0x9C27B0 ),
-	];
-
-	// Helper to generate random transform
-	const _matrix = new THREE.Matrix4();
-	const _position = new THREE.Vector3();
-	const _rotation = new THREE.Euler();
-	const _quaternion = new THREE.Quaternion();
-	const _scale = new THREE.Vector3();
-
-	let groupCount = 0;
-	let instancedCount = 0;
-	let batchedCount = 0;
-
+	// Calculate counts per mode
+	const counts = { group: 0, instanced: 0, batched: 0 };
 	switch ( params.mode ) {
 
-		case 'group':
-			groupCount = count;
-			break;
-		case 'instanced':
-			instancedCount = count;
-			break;
-		case 'batched':
-			batchedCount = count;
-			break;
+		case 'group': counts.group = COUNT; break;
+		case 'instanced': counts.instanced = COUNT; break;
+		case 'batched': counts.batched = COUNT; break;
 		case 'mix':
-			groupCount = Math.ceil( count / 3 );
-			instancedCount = Math.ceil( count / 3 );
-			batchedCount = Math.ceil( count / 3 );
+			counts.group = counts.instanced = counts.batched = Math.ceil( COUNT / 3 );
 			break;
 
 	}
 
-
-	if ( groupCount !== 0 ) {
+	// Create group meshes
+	if ( counts.group ) {
 
 		const materials = colors.map( c => new THREE.MeshStandardMaterial( { color: c } ) );
+		for ( let i = 0; i < counts.group; i ++ ) {
 
-		// Create individual meshes in a group
-		for ( let i = 0; i < groupCount; i ++ ) {
-
-			const material = materials[ i % materials.length ];
-			const geometry = geometries[ i % geometries.length ];
-			const mesh = new THREE.Mesh( geometry, material );
-
-			getRandomTransform( mesh.matrix );
-			mesh.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale );
-
+			const mesh = new THREE.Mesh( geometries[ i % geometries.length ], materials[ i % materials.length ] );
+			randomTransform( mesh.matrix ).decompose( mesh.position, mesh.quaternion, mesh.scale );
 			container.add( mesh );
 
 		}
 
 	}
 
-	if ( instancedCount !== 0 ) {
+	// Create instanced meshes
+	if ( counts.instanced ) {
 
-		// Create InstancedMesh for each geometry type
-		const material = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } );
 		geometries.forEach( geometry => {
 
-			const c = Math.ceil( instancedCount / geometries.length );
-			const instancedMesh = new THREE.InstancedMesh( geometry, material, c );
+			const count = Math.ceil( counts.instanced / geometries.length );
+			const mesh = new THREE.InstancedMesh( geometry, new THREE.MeshStandardMaterial(), count );
+			const matrix = new THREE.Matrix4();
 
-			for ( let i = 0; i < c; i ++ ) {
+			for ( let i = 0; i < count; i ++ ) {
 
-				getRandomTransform( _matrix );
-				instancedMesh.setMatrixAt( i, _matrix );
-
-				const colorIndex = i % colors.length;
-				instancedMesh.setColorAt( i, colors[ colorIndex ] );
+				mesh.setMatrixAt( i, randomTransform( matrix ) );
+				mesh.setColorAt( i, colors[ i % colors.length ] );
 
 			}
 
-			container.add( instancedMesh );
+			container.add( mesh );
 
 		} );
 
 	}
 
-	if ( batchedCount !== 0 ) {
+	// Create batched mesh
+	if ( counts.batched ) {
 
-		// Create BatchedMesh
-		const maxVertexCount = geometries.reduce( ( sum, g ) => sum + g.attributes.position.count, 0 );
-		const maxIndexCount = geometries.reduce( ( sum, g ) => sum + ( g.index ? g.index.count : 0 ), 0 );
-		const material = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } );
+		const maxVerts = geometries.reduce( ( sum, g ) => sum + g.attributes.position.count, 0 );
+		const maxIndices = geometries.reduce( ( sum, g ) => sum + ( g.index?.count || 0 ), 0 );
+		const mesh = new THREE.BatchedMesh( counts.batched, maxVerts, maxIndices, new THREE.MeshStandardMaterial() );
+		const geoIds = geometries.map( g => mesh.addGeometry( g ) );
+		const matrix = new THREE.Matrix4();
 
-		const batchedMesh = new THREE.BatchedMesh( batchedCount, maxVertexCount, maxIndexCount, material );
+		for ( let i = 0; i < counts.batched; i ++ ) {
 
-		// Add geometries
-		const geometryIds = geometries.map( g => batchedMesh.addGeometry( g ) );
-
-		// Add instances
-		for ( let i = 0; i < batchedCount; i ++ ) {
-
-			const geometryId = geometryIds[ i % geometries.length ];
-			const instanceId = batchedMesh.addInstance( geometryId );
-			const colorIndex = i % colors.length;
-
-			getRandomTransform( _matrix );
-			batchedMesh.setMatrixAt( instanceId, _matrix );
-			batchedMesh.setColorAt( instanceId, colors[ colorIndex ] );
+			const id = mesh.addInstance( geoIds[ i % geoIds.length ] );
+			mesh.setMatrixAt( id, randomTransform( matrix ) );
+			mesh.setColorAt( id, colors[ i % colors.length ] );
 
 		}
 
-		container.add( batchedMesh );
-
-	}
-
-	function getRandomTransform( matrix ) {
-
-		const d = Math.cbrt( Math.random() );
-		_position.randomDirection().multiplyScalar( 10 * d * d );
-		_rotation.set(
-			Math.random() * 2 * Math.PI,
-			Math.random() * 2 * Math.PI,
-			Math.random() * 2 * Math.PI
-		);
-		_quaternion.setFromEuler( _rotation );
-		_scale.setScalar( 0.25 + 0.75 * Math.random() );
-		matrix.compose( _position, _quaternion, _scale );
+		container.add( mesh );
 
 	}
 
 }
 
-function updateBVH() {
+function rebuildBVH() {
 
-	// Dispose existing BVH
-	if ( sceneBVH ) {
-
-		container.disposeSceneBoundsTree();
-		sceneBVH = null;
+	// Cleanup
+	if ( bvhHelper ) {
 
 		bvhHelper.dispose();
 		scene.remove( bvhHelper );
 		bvhHelper = null;
 
-
 	}
 
-	// Create new BVH if enabled
-	if ( params.bvh.enabled ) {
+	container.disposeSceneBoundsTree();
 
-		console.time( 'Building Scene BVH' );
+	// Build BVH
+	if ( params.useBVH ) {
+
+		console.time( 'BVH Build' );
 		container.updateMatrixWorld();
-
 		container.computeSceneBoundsTree( {
-			strategy: params.bvh.strategy,
-			precise: params.bvh.precise,
-			includeInstances: params.bvh.includeInstances,
+			strategy: params.strategy,
+			precise: params.precise,
+			includeInstances: params.includeInstances,
 		} );
-
 		container.raycast = acceleratedSceneRaycast;
-		sceneBVH = container.sceneBoundsTree;
-		console.timeEnd( 'Building Scene BVH' );
+		console.timeEnd( 'BVH Build' );
 
-		bvhHelper = new MeshBVHHelper( container, container.sceneBoundsTree, params.bvh.depth );
+		bvhHelper = new MeshBVHHelper( container, container.sceneBoundsTree, params.helperDepth );
 		bvhHelper.color.set( 0xffffff );
 		bvhHelper.opacity = 0.5;
-		bvhHelper.displayParents = params.bvh.displayParents;
-		bvhHelper.update();
 		scene.add( bvhHelper );
 
 	}
 
 }
 
-function updateFromOptions() {
+function rebuild() {
 
-	createSpheres();
-	updateBVH();
-
-}
-
-function onWindowResize() {
-
-	camera.aspect = window.innerWidth / window.innerHeight;
-	camera.updateProjectionMatrix();
-	renderer.setSize( window.innerWidth, window.innerHeight );
-
-}
-
-function onPointerMove( event ) {
-
-	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+	createObjects();
+	rebuildBVH();
 
 }
 
 function performRaycast() {
 
 	raycaster.setFromCamera( mouse, camera );
+	raycaster.firstHitOnly = params.firstHitOnly;
 
-	let intersects = [];
-	let raycastTime = 0;
+	const start = performance.now();
+	const hits = raycaster.intersectObject( container, true );
+	infoElement.innerText = `${ ( performance.now() - start ).toFixed( 3 ) }ms`;
 
-	// Raycast using Scene BVH if enabled
-	const startTime = performance.now();
-	intersects = raycaster.intersectObject( container, true );
-	raycastTime = performance.now() - startTime;
-	infoElement.innerText = `${ raycastTime.toFixed( 3 ) }ms`;
-
-	// Highlight intersected object
-	if ( intersects.length > 0 ) {
-
-		const firstHit = intersects[ 0 ];
-		highlightMesh.position.copy( firstHit.point );
-		highlightMesh.visible = true;
-
-	} else {
-
-		highlightMesh.visible = false;
-
-	}
+	highlightMesh.visible = hits.length > 0;
+	if ( hits.length ) highlightMesh.position.copy( hits[ 0 ].point );
 
 }
 
@@ -397,24 +281,47 @@ function render() {
 
 	if ( bvhHelper ) {
 
-		bvhHelper.depth = params.bvh.depth;
-		bvhHelper.displayParents = params.bvh.displayParents;
-		bvhHelper.visible = params.bvh.visualize;
+		bvhHelper.depth = params.helperDepth;
+		bvhHelper.displayParents = params.helperParents;
+		bvhHelper.visible = params.showHelper;
 
 	}
 
-	if ( params.animate ) {
-
-		container.rotation.y += ( performance.now() - lastTime ) * 1e-4 * 0.5;
-
-	}
-
-	lastTime = performance.now();
+	if ( params.animate ) container.rotation.y += 0.0005;
 
 	scene.fog.near = camera.position.length() - 7.5;
 	scene.fog.far = camera.position.length() + 5;
-	renderer.render( scene, camera );
 
+	renderer.render( scene, camera );
 	stats.end();
+
+}
+
+// Helpers
+function randomTransform( matrix ) {
+
+	const d = Math.cbrt( Math.random() );
+	const pos = new THREE.Vector3().randomDirection().multiplyScalar( 10 * d * d );
+	const rot = new THREE.Quaternion().setFromEuler( new THREE.Euler(
+		Math.random() * Math.PI * 2,
+		Math.random() * Math.PI * 2,
+		Math.random() * Math.PI * 2
+	) );
+	const scale = new THREE.Vector3().setScalar( 0.25 + Math.random() * 0.75 );
+	return matrix.compose( pos, rot, scale );
+
+}
+
+function disposeGroup( group ) {
+
+	while ( group.children.length ) {
+
+		const child = group.children[ 0 ];
+		child.geometry?.dispose();
+		child.material?.dispose();
+		child.dispose?.();
+		group.remove( child );
+
+	}
 
 }

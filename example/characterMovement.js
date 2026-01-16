@@ -8,45 +8,46 @@ import { MeshBVH, BVHHelper } from 'three-mesh-bvh';
 import { StaticSceneBVH } from '..';
 
 const params = {
-
 	firstPerson: false,
 	displayBVH: false,
 	visualizeDepth: 10,
 	gravity: - 80,
 	playerSpeed: 10,
 	physicsSteps: 5,
-
-	reset: reset,
-
+	reset: () => reset(),
 };
 
 const OFF_GROUND_TIME = 0.05;
 const WALK_CYCLE_TIME = 2 * Math.PI;
-let offGroundTimer = OFF_GROUND_TIME;
-let renderer, camera, scene, clock, gui, stats;
-let level, player, playerMesh, controls, sceneBVH, sceneHelper;
+
+// Module-level reusable vectors/matrices for physics calculations
+const _playerVelocity = new THREE.Vector3();
+const _upVector = new THREE.Vector3( 0, 1, 0 );
+const _tempVector = new THREE.Vector3();
+const _tempVector2 = new THREE.Vector3();
+const _sceneLocalBox = new THREE.Box3();
+const _objectLocalBox = new THREE.Box3();
+const _invMat = new THREE.Matrix4();
+const _worldSegment = new THREE.Line3();
+const _localSegment = new THREE.Line3();
+const _sphere = new THREE.Sphere();
+
+let renderer, camera, scene, clock, stats, controls;
+let level, player, playerMesh, sceneBVH, sceneHelper;
 let playerIsOnGround = false;
-let fwdPressed = false, bkdPressed = false, lftPressed = false, rgtPressed = false;
-let playerVelocity = new THREE.Vector3();
-let upVector = new THREE.Vector3( 0, 1, 0 );
-let tempVector = new THREE.Vector3();
-let tempVector2 = new THREE.Vector3();
-let sceneLocalBox = new THREE.Box3();
-let objectLocalBox = new THREE.Box3();
-let invMat = new THREE.Matrix4();
-let worldSegment = new THREE.Line3();
-let localSegment = new THREE.Line3();
-let sphere = new THREE.Sphere();
+let offGroundTimer = OFF_GROUND_TIME;
 let walkAnimation = 0;
+
+const keys = { fwd: false, bkd: false, lft: false, rgt: false };
 
 init();
 render();
 
 function init() {
 
-	const bgColor = 0x263238 / 2;
+	const bgColor = 0x131619;
 
-	// renderer setup
+	// Renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.setPixelRatio( window.devicePixelRatio );
 	renderer.setSize( window.innerWidth, window.innerHeight );
@@ -55,12 +56,16 @@ function init() {
 	renderer.shadowMap.type = THREE.PCFShadowMap;
 	document.body.appendChild( renderer.domElement );
 
-	// scene setup
+	// Scene
 	scene = new THREE.Scene();
 
-	// lights
+	// Camera
+	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 100 );
+	camera.position.set( 15, 7.5, 15 );
+
+	// Lights
 	const light = new THREE.DirectionalLight( 0xffffff, 3 );
-	light.position.set( 1, 1.5, 1 ).multiplyScalar( 50 );
+	light.position.set( 50, 75, 50 );
 	light.shadow.mapSize.setScalar( 2048 );
 	light.shadow.bias = - 1e-4;
 	light.shadow.normalBias = 0.05;
@@ -68,84 +73,61 @@ function init() {
 	light.castShadow = true;
 
 	const shadowCam = light.shadow.camera;
-	shadowCam.bottom = shadowCam.left = - 30;
+	shadowCam.left = shadowCam.bottom = - 30;
 	shadowCam.top = 30;
 	shadowCam.right = 45;
 
-	scene.add( light );
-	scene.add( new THREE.HemisphereLight( 0xffffff, 0x223344, 0.4 ) );
+	scene.add( light, new THREE.HemisphereLight( 0xffffff, 0x223344, 0.4 ) );
 
-	// camera setup
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 50 );
-	camera.position.set( 10, 5, 10 ).multiplyScalar( 1.5 );
-	camera.far = 100;
-	camera.updateProjectionMatrix();
-	window.camera = camera;
-
+	// Controls
+	controls = new OrbitControls( camera, renderer.domElement );
 	clock = new THREE.Clock();
 
-	controls = new OrbitControls( camera, renderer.domElement );
-
-	// stats setup
+	// Stats
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
 
+	// Load environment
 	loadColliderEnvironment();
 
-	// character
+	// Create player
 	player = new THREE.Group();
 	player.rotation.y = Math.PI / 2;
 	player.capsuleInfo = {
 		radius: 0.75,
-		segment: new THREE.Line3( new THREE.Vector3( 0, 0.75, 0 ), new THREE.Vector3( 0, 1.0, 0.0 ) )
+		segment: new THREE.Line3( new THREE.Vector3( 0, 0.75, 0 ), new THREE.Vector3( 0, 1.0, 0 ) )
 	};
 
+	// Player mesh parts
 	playerMesh = new THREE.Group();
 	player.add( playerMesh );
 
-	const body = new THREE.Mesh(
-		new RoundedBoxGeometry( 1.0, 2.0, 1.0, 10, 0.5 ),
-		new THREE.MeshStandardMaterial()
-	);
-	body.position.y = 0.75;
-	body.castShadow = true;
-	body.receiveShadow = true;
-	body.material.shadowSide = 2;
+	const material = new THREE.MeshStandardMaterial( { shadowSide: 2 } );
 
-	const arms = new THREE.Mesh(
-		new RoundedBoxGeometry( 0.5, 2.0, 0.5, 10, 0.5 ),
-		new THREE.MeshStandardMaterial()
-	);
+	const body = new THREE.Mesh( new RoundedBoxGeometry( 1.0, 2.0, 1.0, 10, 0.5 ), material );
+	body.position.y = 0.75;
+	body.castShadow = body.receiveShadow = true;
+
+	const arms = new THREE.Mesh( new RoundedBoxGeometry( 0.5, 2.0, 0.5, 10, 0.5 ), material );
 	arms.rotation.x = Math.PI / 2;
 	arms.position.y = 1.25;
-	arms.castShadow = true;
-	arms.receiveShadow = true;
-	arms.material.shadowSide = 2;
+	arms.castShadow = arms.receiveShadow = true;
 
-	const head = new THREE.Mesh(
-		new THREE.SphereGeometry(),
-		new THREE.MeshStandardMaterial()
-	);
-	head.scale.setScalar( 0.5 );
-	head.position.y = 1 + 1;
-	head.castShadow = true;
-	head.receiveShadow = true;
-	head.material.shadowSide = 2;
+	const head = new THREE.Mesh( new THREE.SphereGeometry( 0.5 ), material );
+	head.position.y = 2;
+	head.castShadow = head.receiveShadow = true;
 
 	playerMesh.add( body, arms, head );
-
-
 	scene.add( player );
 	reset();
 
-	// dat.gui
-	gui = new GUI();
+	// GUI
+	const gui = new GUI();
 	gui.add( params, 'firstPerson' ).onChange( v => {
 
 		if ( ! v ) {
 
-			camera
-				.position
+			camera.position
 				.sub( controls.target )
 				.normalize()
 				.multiplyScalar( 10 )
@@ -157,48 +139,36 @@ function init() {
 
 	const visFolder = gui.addFolder( 'Visualization' );
 	visFolder.add( params, 'displayBVH' );
-	visFolder.add( params, 'visualizeDepth', 1, 20, 1 ).onChange( v => {
-
-		sceneHelper.depth = v;
-		sceneHelper.update();
-
-	} );
-	visFolder.open();
+	visFolder.add( params, 'visualizeDepth', 1, 20, 1 );
 
 	const physicsFolder = gui.addFolder( 'Player' );
 	physicsFolder.add( params, 'physicsSteps', 0, 30, 1 );
-	physicsFolder.add( params, 'gravity', - 100, 100, 0.01 ).onChange( v => {
-
-		params.gravity = parseFloat( v );
-
-	} );
+	physicsFolder.add( params, 'gravity', - 100, 100, 0.01 );
 	physicsFolder.add( params, 'playerSpeed', 1, 20 );
-	physicsFolder.open();
 
 	gui.add( params, 'reset' );
-	gui.open();
 
-	window.addEventListener( 'resize', function () {
+	// Event listeners
+	window.addEventListener( 'resize', () => {
 
 		camera.aspect = window.innerWidth / window.innerHeight;
 		camera.updateProjectionMatrix();
-
 		renderer.setSize( window.innerWidth, window.innerHeight );
 
-	}, false );
+	} );
 
-	window.addEventListener( 'keydown', function ( e ) {
+	window.addEventListener( 'keydown', e => {
 
 		switch ( e.code ) {
 
-			case 'KeyW': fwdPressed = true; break;
-			case 'KeyS': bkdPressed = true; break;
-			case 'KeyD': rgtPressed = true; break;
-			case 'KeyA': lftPressed = true; break;
+			case 'KeyW': keys.fwd = true; break;
+			case 'KeyS': keys.bkd = true; break;
+			case 'KeyD': keys.rgt = true; break;
+			case 'KeyA': keys.lft = true; break;
 			case 'Space':
 				if ( playerIsOnGround || offGroundTimer > 0 ) {
 
-					playerVelocity.y = 20.0;
+					_playerVelocity.y = 20.0;
 					playerIsOnGround = false;
 					offGroundTimer = 0;
 
@@ -210,14 +180,14 @@ function init() {
 
 	} );
 
-	window.addEventListener( 'keyup', function ( e ) {
+	window.addEventListener( 'keyup', e => {
 
 		switch ( e.code ) {
 
-			case 'KeyW': fwdPressed = false; break;
-			case 'KeyS': bkdPressed = false; break;
-			case 'KeyD': rgtPressed = false; break;
-			case 'KeyA': lftPressed = false; break;
+			case 'KeyW': keys.fwd = false; break;
+			case 'KeyS': keys.bkd = false; break;
+			case 'KeyD': keys.rgt = false; break;
+			case 'KeyA': keys.lft = false; break;
 
 		}
 
@@ -227,73 +197,70 @@ function init() {
 
 function loadColliderEnvironment() {
 
-	new GLTFLoader()
-		.load( new URL( './models/grandmas_house_compressed.glb', import.meta.url ).toString(), res => {
+	new GLTFLoader().load( new URL( './models/grandmas_house_compressed.glb', import.meta.url ).toString(), res => {
 
-			const gltfScene = res.scene;
-			gltfScene.scale.setScalar( 1.75 );
+		const gltfScene = res.scene;
+		gltfScene.scale.setScalar( 1.75 );
+		gltfScene.updateMatrixWorld( true );
 
-			const box = new THREE.Box3();
-			box.setFromObject( gltfScene );
-			gltfScene.updateMatrixWorld( true );
+		// Setup materials and geometry
+		const toRemove = [];
+		gltfScene.traverse( c => {
 
-			// visual geometry setup
-			let toRemove = [];
-			gltfScene.traverse( c => {
+			if ( c.material?.isMeshPhysicalMaterial ) {
 
-				if ( c.material?.isMeshPhysicalMaterial ) {
+				c.material.transmission = 0;
 
-					c.material.transmission = 0;
+			}
 
-				}
+			// Remove cat/sheep models
+			if ( /cat|sheep/.test( c.name ) ) {
 
-				if ( /cat/.test( c.name ) || /sheep/.test( c.name ) ) {
+				c.traverse( child => {
 
-					c.traverse( c => {
+					if ( child.material ) {
 
-						if ( c.material ) {
+						child.material = child.material.clone();
+						child.material.color.set( 0xff0000 );
 
-							c.material = c.material.clone();
-							c.material.color.set( 0xff0000 );
+					}
 
-						}
+				} );
+				toRemove.push( c );
+				return;
 
-					} );
-					toRemove.push( c );
-					return;
+			}
 
-				}
+			c.castShadow = c.receiveShadow = true;
+			if ( c.isMesh && ! c.geometry.boundsTree ) {
 
-				c.castShadow = true;
-				c.receiveShadow = true;
-				if ( c.isMesh && ! c.geometry.boundsTree ) {
+				c.geometry.boundsTree = new MeshBVH( c.geometry );
 
-					c.geometry.boundsTree = new MeshBVH( c.geometry );
-
-				}
-
-			} );
-
-			toRemove.forEach( c => c.removeFromParent() );
-
-			level = gltfScene;
-			scene.add( level );
-
-			level.updateMatrixWorld( true );
-			sceneBVH = new StaticSceneBVH( level, { maxLeafSize: 1 } );
-			sceneHelper = new BVHHelper( level, sceneBVH );
-			sceneHelper.update();
-			sceneHelper.opacity = 0.75;
-			sceneHelper.color.set( 0xffffff );
-			scene.add( sceneHelper );
+			}
 
 		} );
+
+		toRemove.forEach( c => c.removeFromParent() );
+
+		level = gltfScene;
+		scene.add( level );
+
+		level.updateMatrixWorld( true );
+		sceneBVH = new StaticSceneBVH( level, { maxLeafSize: 1 } );
+
+		sceneHelper = new BVHHelper( level, sceneBVH );
+		sceneHelper.opacity = 0.75;
+		sceneHelper.color.set( 0xffffff );
+		sceneHelper.update();
+		scene.add( sceneHelper );
+
+	} );
 
 }
 
 function reset() {
 
-	playerVelocity.set( 0, 0, 0 );
+	_playerVelocity.set( 0, 0, 0 );
 	player.position.set( 8, 10, 2.5 );
 	camera.position.sub( controls.target );
 	controls.target.copy( player.position );
@@ -304,58 +271,44 @@ function reset() {
 
 function updatePlayer( delta ) {
 
-	// adjust player position based on collisions
 	player.updateMatrixWorld();
-	invMat.copy( sceneBVH.matrixWorld ).invert();
+	_invMat.copy( sceneBVH.matrixWorld ).invert();
 
-	// get the position of the capsule in world space
+	// Get capsule in world space
 	const capsuleInfo = player.capsuleInfo;
-	worldSegment.copy( capsuleInfo.segment );
-	worldSegment.applyMatrix4( player.matrixWorld );
+	_worldSegment
+		.copy( capsuleInfo.segment )
+		.applyMatrix4( player.matrixWorld );
 
-	// apply gravity and move the player
-	worldSegment.start.addScaledVector( playerVelocity, delta );
-	worldSegment.end.addScaledVector( playerVelocity, delta );
+	// Apply gravity
+	_playerVelocity.y += delta * params.gravity;
+	_worldSegment.start.addScaledVector( _playerVelocity, delta );
+	_worldSegment.end.addScaledVector( _playerVelocity, delta );
 
-	// move the player
+	// Calculate walk direction
 	const angle = controls.getAzimuthalAngle();
 	const walkDirection = new THREE.Vector3();
-	if ( fwdPressed ) {
+	const directions = [
+		{ key: keys.fwd, vec: [ 0, 0, - 1 ] },
+		{ key: keys.bkd, vec: [ 0, 0, 1 ] },
+		{ key: keys.lft, vec: [ - 1, 0, 0 ] },
+		{ key: keys.rgt, vec: [ 1, 0, 0 ] },
+	];
 
-		tempVector.set( 0, 0, - 1 ).applyAxisAngle( upVector, angle );
-		walkDirection.addScaledVector( tempVector, params.playerSpeed * delta );
+	for ( const { key, vec } of directions ) {
 
-	}
+		if ( key ) {
 
-	if ( bkdPressed ) {
+			_tempVector.set( ...vec ).applyAxisAngle( _upVector, angle );
+			walkDirection.addScaledVector( _tempVector, params.playerSpeed * delta );
 
-		tempVector.set( 0, 0, 1 ).applyAxisAngle( upVector, angle );
-		walkDirection.addScaledVector( tempVector, params.playerSpeed * delta );
-
-	}
-
-	if ( lftPressed ) {
-
-		tempVector.set( - 1, 0, 0 ).applyAxisAngle( upVector, angle );
-		walkDirection.addScaledVector( tempVector, params.playerSpeed * delta );
+		}
 
 	}
 
-	if ( rgtPressed ) {
-
-		tempVector.set( 1, 0, 0 ).applyAxisAngle( upVector, angle );
-		walkDirection.addScaledVector( tempVector, params.playerSpeed * delta );
-
-	}
-
+	// Update walk animation
 	const animationStep = delta * 25;
-	walkAnimation -= animationStep;
-
-	if ( walkAnimation < 0 ) {
-
-		walkAnimation += WALK_CYCLE_TIME;
-
-	}
+	walkAnimation = ( walkAnimation - animationStep + WALK_CYCLE_TIME ) % WALK_CYCLE_TIME;
 
 	const cycle = ( walkAnimation / Math.PI ) % 1;
 	const animationOnGround = Math.abs( cycle ) < 2 * animationStep / Math.PI || Math.abs( 1 - cycle ) < 2 * animationStep / Math.PI;
@@ -365,52 +318,42 @@ function updatePlayer( delta ) {
 
 	}
 
-	// apply walk direction to the collider
+	// Apply walk direction
 	if ( walkDirection.length() > 0 ) {
 
-		worldSegment.start.add( walkDirection );
-		worldSegment.end.add( walkDirection );
+		_worldSegment.start.add( walkDirection );
+		_worldSegment.end.add( walkDirection );
 
+		// Rotate player to face walk direction
 		const right = new THREE.Vector3( 1, 0, 0 );
 		const walkAngle = right.angleTo( walkDirection.normalize() );
 		right.cross( walkDirection );
 
-		const sign = Math.sign( right.y );
-		const quat = new THREE.Quaternion().setFromAxisAngle( right.set( 0, 1, 0 ), sign * walkAngle );
+		const quat = new THREE.Quaternion().setFromAxisAngle( _upVector, Math.sign( right.y ) * walkAngle );
 		player.quaternion.slerp( quat, 1 - ( 2 ** ( - delta / 0.05 ) ) );
 
-	} else {
+	} else if ( animationOnGround ) {
 
-		if ( animationOnGround ) {
-
-			walkAnimation = Math.round( walkAnimation / Math.PI ) * Math.PI;
-
-		}
+		walkAnimation = Math.round( walkAnimation / Math.PI ) * Math.PI;
 
 	}
 
+	// Apply walk animation to player mesh
 	playerMesh.position.y = Math.abs( Math.sin( walkAnimation ) ) * 0.6;
 	playerMesh.rotation.x = Math.sin( walkAnimation ) * 0.3;
 
+	// Get capsule AABB in scene BVH space
+	_sceneLocalBox.makeEmpty();
+	_sceneLocalBox.expandByPoint( _worldSegment.start );
+	_sceneLocalBox.expandByPoint( _worldSegment.end );
+	_sceneLocalBox.min.addScalar( - capsuleInfo.radius );
+	_sceneLocalBox.max.addScalar( capsuleInfo.radius );
+	_sceneLocalBox.applyMatrix4( _invMat );
 
-
-
-
-	playerVelocity.y += delta * params.gravity;
-
-	// get the axis aligned bounding box of the capsule in local scene bvh space
-	sceneLocalBox.makeEmpty();
-	sceneLocalBox.expandByPoint( worldSegment.start );
-	sceneLocalBox.expandByPoint( worldSegment.end );
-
-	sceneLocalBox.min.addScalar( - capsuleInfo.radius );
-	sceneLocalBox.max.addScalar( capsuleInfo.radius );
-	sceneLocalBox.applyMatrix4( invMat );
-
-	const segmentStart = worldSegment.start.clone();
+	const segmentStart = _worldSegment.start.clone();
 	sceneBVH.shapecast( {
 
-		intersectsBounds: box => box.intersectsBox( sceneLocalBox ),
+		intersectsBounds: box => box.intersectsBox( _sceneLocalBox ),
 
 		intersectsObject: object => {
 
@@ -420,44 +363,38 @@ function updatePlayer( delta ) {
 
 			}
 
-			invMat.copy( object.matrixWorld ).invert();
+			_invMat.copy( object.matrixWorld ).invert();
 
-			// get the axis aligned bounding box of the capsule in local object space
-			objectLocalBox.makeEmpty();
-			objectLocalBox.expandByPoint( worldSegment.start );
-			objectLocalBox.expandByPoint( worldSegment.end );
+			// Get capsule AABB in object space
+			_objectLocalBox.makeEmpty();
+			_objectLocalBox.expandByPoint( _worldSegment.start );
+			_objectLocalBox.expandByPoint( _worldSegment.end );
+			_objectLocalBox.min.addScalar( - capsuleInfo.radius );
+			_objectLocalBox.max.addScalar( capsuleInfo.radius );
+			_objectLocalBox.applyMatrix4( _invMat );
 
-			objectLocalBox.min.addScalar( - capsuleInfo.radius );
-			objectLocalBox.max.addScalar( capsuleInfo.radius );
-			objectLocalBox.applyMatrix4( invMat );
+			// Get segment and sphere in local space
+			_localSegment.copy( _worldSegment ).applyMatrix4( _invMat );
+			_sphere.radius = capsuleInfo.radius;
+			_sphere.applyMatrix4( _invMat );
+			const localRadius = _sphere.radius;
 
-			// get the segment in the local space for triangle intersection
-			localSegment.copy( worldSegment ).applyMatrix4( invMat );
-			sphere.radius = capsuleInfo.radius;
-
-			// calculate the radius of the capsule in the local space
-			sphere.applyMatrix4( invMat );
-
-			const localRadius = sphere.radius;
 			object.geometry.boundsTree.shapecast( {
 
-				intersectsBounds: box => box.intersectsBox( objectLocalBox ),
+				intersectsBounds: box => box.intersectsBox( _objectLocalBox ),
 
 				intersectsTriangle: tri => {
 
-					// check if the triangle is intersecting the capsule and adjust the
-					// capsule position if it is.
-					const triPoint = tempVector;
-					const capsulePoint = tempVector2;
+					const triPoint = _tempVector;
+					const capsulePoint = _tempVector2;
 
-					const distance = tri.closestPointToSegment( localSegment, triPoint, capsulePoint );
+					const distance = tri.closestPointToSegment( _localSegment, triPoint, capsulePoint );
 					if ( distance < localRadius ) {
 
 						const depth = localRadius - distance;
 						const direction = capsulePoint.sub( triPoint ).normalize();
-
-						localSegment.start.addScaledVector( direction, depth );
-						localSegment.end.addScaledVector( direction, depth );
+						_localSegment.start.addScaledVector( direction, depth );
+						_localSegment.end.addScaledVector( direction, depth );
 
 					}
 
@@ -465,81 +402,59 @@ function updatePlayer( delta ) {
 
 			} );
 
-			worldSegment.copy( localSegment ).applyMatrix4( object.matrixWorld );
+			_worldSegment.copy( _localSegment ).applyMatrix4( object.matrixWorld );
 
 		},
 
 	} );
 
-	// shift the player
-	const deltaVector = tempVector2;
-	deltaVector.copy( player.capsuleInfo.segment.start ).applyMatrix4( player.matrixWorld );
-	deltaVector.subVectors( worldSegment.start, deltaVector );
-
+	// Update player position
+	const deltaVector = _tempVector2;
+	deltaVector.copy( capsuleInfo.segment.start ).applyMatrix4( player.matrixWorld );
+	deltaVector.subVectors( _worldSegment.start, deltaVector );
 	player.position.add( deltaVector );
 
-	// check how much the geometry "pushed" the capsule
-	deltaVector.copy( segmentStart );
-	deltaVector.subVectors( worldSegment.start, deltaVector );
+	// Check if player is on ground
+	deltaVector.copy( segmentStart ).subVectors( _worldSegment.start, deltaVector );
+	const touchingGround = deltaVector.y > Math.abs( delta * _playerVelocity.y * 0.25 );
 
-	// if the player was primarily adjusted vertically we assume it's on something we should consider ground
-	const touchingGround = deltaVector.y > Math.abs( delta * playerVelocity.y * 0.25 );
 	if ( touchingGround ) {
 
 		offGroundTimer = OFF_GROUND_TIME;
 		playerIsOnGround = true;
+		_playerVelocity.set( 0, 0, 0 );
 
 	} else {
 
 		offGroundTimer -= delta;
 		playerIsOnGround = false;
+		_playerVelocity.addScaledVector( deltaVector, - deltaVector.dot( _playerVelocity ) );
 
 	}
 
-	if ( ! touchingGround ) {
-
-		playerVelocity.addScaledVector( deltaVector, - deltaVector.dot( playerVelocity ) );
-
-	} else {
-
-		playerVelocity.set( 0, 0, 0 );
-
-	}
-
-	// if the player has fallen too far below the level reset their position to the start
-	if ( player.position.y < - 5 ) {
-
-		reset();
-
-	}
+	// Reset if fallen too far
+	if ( player.position.y < - 5 ) reset();
 
 }
 
 function updateCamera() {
 
-	// adjust the camera
 	camera.position.sub( controls.target );
 	controls.target.sub( player.position );
 
 	const scalar = camera.position.length() * 0.1;
 	let heightOffset = controls.target.y;
 	controls.target.y = 0;
+
+	// Limit horizontal distance
 	if ( controls.target.length() > 4 * scalar ) {
 
-		controls.target.normalize();
-		controls.target.multiplyScalar( 4 * scalar );
+		controls.target.normalize().multiplyScalar( 4 * scalar );
 
 	}
 
-	if ( heightOffset < 1.5 - 0.5 * scalar ) {
-
-		heightOffset = 1.5 - 0.5 * scalar;
-
-	} else if ( heightOffset > 1.5 + 1 * scalar ) {
-
-		heightOffset = 1.5 + 1 * scalar;
-
-	}
+	// Clamp height offset
+	heightOffset = Math.max( 1.5 - 0.5 * scalar, Math.min( heightOffset, 1.5 + scalar ) );
 
 	controls.target.y = heightOffset;
 	controls.target.add( player.position );
@@ -553,11 +468,12 @@ function render() {
 	requestAnimationFrame( render );
 
 	const delta = Math.min( clock.getDelta(), 0.1 );
+
+	// Update controls based on first-person mode
 	if ( params.firstPerson ) {
 
 		controls.maxPolarAngle = Math.PI;
-		controls.minDistance = 1e-4;
-		controls.maxDistance = 1e-4;
+		controls.minDistance = controls.maxDistance = 1e-4;
 
 	} else {
 
@@ -570,6 +486,7 @@ function render() {
 	if ( level ) {
 
 		sceneHelper.visible = params.displayBVH;
+		sceneHelper.depth = params.visualizeDepth;
 
 		const physicsSteps = params.physicsSteps;
 		for ( let i = 0; i < physicsSteps; i ++ ) {
@@ -581,12 +498,7 @@ function render() {
 	}
 
 	updateCamera();
-
-	// TODO: limit the camera movement based on the collider
-	// raycast in direction of camera and move it if it's further than the closest point
-
 	controls.update();
-
 	renderer.render( scene, camera );
 
 }
