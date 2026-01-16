@@ -65,6 +65,7 @@ export class StaticSceneBVH extends BVH {
 
 	writePrimitiveBounds( i, targetBuffer, writeOffset ) {
 
+		// TODO: it would be best to cache this matrix inversion
 		const { primitiveBuffer } = this;
 		_inverseMatrix.copy( this.matrixWorld ).invert();
 
@@ -98,6 +99,7 @@ export class StaticSceneBVH extends BVH {
 
 	}
 
+	// TODO: this is out of sync with the MeshBVH raycast signature.
 	raycast( raycaster, intersects = [] ) {
 
 		const { matrixWorld, includeInstances } = this;
@@ -199,6 +201,9 @@ export class StaticSceneBVH extends BVH {
 					} );
 
 					_mesh.material = null;
+					_geometry.index = null;
+					_geometry.attributes.position = null;
+					_geometry.setDrawRange( 0, Infinity );
 
 				} else {
 
@@ -433,13 +438,16 @@ export class StaticSceneBVH extends BVH {
 
 			} else if ( object.isBatchedMesh && includeInstances ) {
 
-				const count = object.instanceCount;
+				const instanceCount = object.instanceCount;
 				let instance = 0;
 				let iter = 0;
-				while ( instance < count && iter < 1e6 ) {
+				// TODO: use a better check here, like "maxInstanceCount"
+				while ( instance < instanceCount && iter < 1e6 ) {
 
 					iter ++;
 
+					// TODO: it would be better to have a consistent way of querying whether an
+					// instance were active
 					try {
 
 						object.getVisibleAt( instance );
@@ -575,9 +583,9 @@ function iterateOverObjects( offset, count, bvh, callback, contained, depth, /* 
 function shrinkToSphere( box, sphere ) {
 
 	_vec.copy( sphere.center ).addScalar( - sphere.radius );
-	box.min.min( _vec );
+	box.min.max( _vec );
 
 	_vec.copy( sphere.center ).addScalar( sphere.radius );
-	box.max.max( _vec );
+	box.max.min( _vec );
 
 }
