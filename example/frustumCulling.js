@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'stats.js';
-import { CONTAINED, INTERSECTED, MeshBVHHelper } from 'three-mesh-bvh';
+import { BVHHelper, CONTAINED, INTERSECTED } from 'three-mesh-bvh';
 import { StaticSceneBVH } from '../src/StaticSceneBVH.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -132,47 +132,10 @@ function createObjects() {
 
 	// Create BVH
 	sceneBVH = new StaticSceneBVH( batchedMesh );
-	bvhHelper = new MeshBVHHelper( batchedMesh, sceneBVH, params.helperDepth );
+	bvhHelper = new BVHHelper( batchedMesh, sceneBVH, params.helperDepth );
 	bvhHelper.color.set( 0xffffff );
 	bvhHelper.opacity = 0.5;
-
-	// replacing the default matrix update since there is special handling for batched mesh indices
-	// TODO: fix this in three-mesh-bvh
-	bvhHelper.updateMatrixWorld = function ( ...args ) {
-
-		const mesh = this.mesh;
-		const parent = this.parent;
-
-		if ( mesh !== null ) {
-
-			mesh.updateWorldMatrix( true, false );
-
-			if ( parent ) {
-
-				this.matrix
-					.copy( parent.matrixWorld )
-					.invert()
-					.multiply( mesh.matrixWorld );
-
-			} else {
-
-				this.matrix
-					.copy( mesh.matrixWorld );
-
-			}
-
-			this.matrix.decompose(
-				this.position,
-				this.quaternion,
-				this.scale,
-			);
-
-		}
-
-		THREE.Object3D.prototype.updateMatrixWorld.call( this, ...args );
-
-	};
-
+	bvhHelper.instanceId = - 1;
 	scene.add( bvhHelper );
 
 }

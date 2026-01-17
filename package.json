@@ -28,7 +28,7 @@
     "eslint-config-mdcs": "^5.0.0",
     "stats.js": "^0.17.0",
     "three": "^0.182.0",
-    "three-mesh-bvh": "^0.9.6",
+    "three-mesh-bvh": "^0.9.7",
     "vite": "^6.2.2"
   },
   "peerDependencies": {
