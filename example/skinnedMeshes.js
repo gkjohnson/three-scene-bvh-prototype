@@ -67,8 +67,26 @@ function init() {
 	gui.add( params, 'animate' ).onChange( v => ! v && updateBVH() );
 	gui.add( params, 'precise' ).onChange( () => ! params.animate && updateBVH() );
 	gui.add( params, 'showHelper' );
-	gui.add( params, 'helperDepth', 1, 20, 1 );
-	gui.add( params, 'helperParents' );
+	gui.add( params, 'helperDepth', 1, 20, 1 ).onChange( v => {
+
+		if ( bvhHelper ) {
+
+			bvhHelper.depth = v;
+			bvhHelper.update();
+
+		}
+
+	} );
+	gui.add( params, 'helperParents' ).onChange( v => {
+
+		if ( bvhHelper ) {
+
+			bvhHelper.displayParents = v;
+			bvhHelper.update();
+
+		}
+
+	} );
 
 	// Events
 	window.addEventListener( 'resize', () => {
@@ -157,9 +175,11 @@ function updateBVH() {
 
 function render() {
 
-	requestAnimationFrame( render );
-
 	stats.begin();
+
+	// Update GUI settings
+	if ( bvhHelper ) bvhHelper.visible = params.showHelper;
+
 	controls.update();
 
 	// Update animations
@@ -170,18 +190,9 @@ function render() {
 
 	}
 
-	// Update helper
-	if ( bvhHelper ) {
-
-		bvhHelper.depth = params.helperDepth;
-		bvhHelper.displayParents = params.helperParents;
-		bvhHelper.visible = params.showHelper;
-
-	}
-
 	renderer.render( scene, camera );
 	stats.end();
 
 }
 
-render();
+renderer.setAnimationLoop( render );

@@ -11,9 +11,7 @@ const _ray = /* @__PURE__ */ new Ray();
 const _mesh = /* @__PURE__ */ new Mesh();
 const _geometryRange = {};
 
-// TODO: how can we use this for frustum culling?
 // TODO: account for a "custom" object? Not necessary here? Create a more abstract foundation for this case?
-// TODO: can we handle margin? Custom expansion?
 export class StaticSceneBVH extends BVH {
 
 	constructor( root, options = {} ) {
@@ -438,11 +436,11 @@ export class StaticSceneBVH extends BVH {
 
 			} else if ( object.isBatchedMesh && includeInstances ) {
 
-				const instanceCount = object.instanceCount;
+				const { instanceCount, maxInstanceCount } = object;
 				let instance = 0;
 				let iter = 0;
 				// TODO: use a better check here, like "maxInstanceCount"
-				while ( instance < instanceCount && iter < 1e6 ) {
+				while ( instance < instanceCount && iter < maxInstanceCount ) {
 
 					iter ++;
 

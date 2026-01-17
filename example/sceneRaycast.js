@@ -32,14 +32,14 @@ const params = {
 let renderer, scene, camera, controls, stats;
 let container, bvhHelper;
 let raycaster, mouse, highlightMesh;
-let infoElement;
+let outputElement;
 
 init();
 rebuild();
 
 function init() {
 
-	infoElement = document.getElementById( 'info' );
+	outputElement = document.getElementById( 'output' );
 
 	// Renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -127,8 +127,26 @@ function setupGUI() {
 
 	const helperFolder = gui.addFolder( 'Helper' );
 	helperFolder.add( params, 'showHelper' );
-	helperFolder.add( params, 'helperDepth', 1, 20, 1 );
-	helperFolder.add( params, 'helperParents' );
+	helperFolder.add( params, 'helperDepth', 1, 20, 1 ).onChange( v => {
+
+		if ( bvhHelper ) {
+
+			bvhHelper.depth = v;
+			bvhHelper.update();
+
+		}
+
+	} );
+	helperFolder.add( params, 'helperParents' ).onChange( v => {
+
+		if ( bvhHelper ) {
+
+			bvhHelper.displayParents = v;
+			bvhHelper.update();
+
+		}
+
+	} );
 
 }
 
@@ -244,7 +262,7 @@ function rebuildBVH() {
 
 		bvhHelper = new MeshBVHHelper( container, container.sceneBoundsTree, params.helperDepth );
 		bvhHelper.color.set( 0xffffff );
-		bvhHelper.opacity = 0.5;
+		bvhHelper.opacity = 0.6;
 		scene.add( bvhHelper );
 
 	}
@@ -265,7 +283,7 @@ function performRaycast() {
 
 	const start = performance.now();
 	const hits = raycaster.intersectObject( container, true );
-	infoElement.innerText = `${ ( performance.now() - start ).toFixed( 3 ) }ms`;
+	outputElement.innerText = `${ ( performance.now() - start ).toFixed( 3 ) }ms`;
 
 	highlightMesh.visible = hits.length > 0;
 	if ( hits.length ) highlightMesh.position.copy( hits[ 0 ].point );
@@ -276,21 +294,14 @@ function render() {
 
 	stats.begin();
 
-	controls.update();
-	performRaycast();
-
-	if ( bvhHelper ) {
-
-		bvhHelper.depth = params.helperDepth;
-		bvhHelper.displayParents = params.helperParents;
-		bvhHelper.visible = params.showHelper;
-
-	}
-
+	// Update GUI settings
+	if ( bvhHelper ) bvhHelper.visible = params.showHelper;
 	if ( params.animate ) container.rotation.y += 0.0005;
-
 	scene.fog.near = camera.position.length() - 7.5;
 	scene.fog.far = camera.position.length() + 5;
+
+	controls.update();
+	performRaycast();
 
 	renderer.render( scene, camera );
 	stats.end();

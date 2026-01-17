@@ -41,7 +41,7 @@ let walkAnimation = 0;
 const keys = { fwd: false, bkd: false, lft: false, rgt: false };
 
 init();
-render();
+renderer.setAnimationLoop( render );
 
 function init() {
 
@@ -60,7 +60,7 @@ function init() {
 	scene = new THREE.Scene();
 
 	// Camera
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 100 );
+	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 200 );
 	camera.position.set( 15, 7.5, 15 );
 
 	// Lights
@@ -139,7 +139,12 @@ function init() {
 
 	const visFolder = gui.addFolder( 'Visualization' );
 	visFolder.add( params, 'displayBVH' );
-	visFolder.add( params, 'visualizeDepth', 1, 20, 1 );
+	visFolder.add( params, 'visualizeDepth', 1, 20, 1 ).onChange( () => {
+
+		sceneHelper.depth = params.visualizeDepth;
+		sceneHelper.update();
+
+	} );
 
 	const physicsFolder = gui.addFolder( 'Player' );
 	physicsFolder.add( params, 'physicsSteps', 0, 30, 1 );
@@ -249,7 +254,7 @@ function loadColliderEnvironment() {
 		sceneBVH = new StaticSceneBVH( level, { maxLeafSize: 1 } );
 
 		sceneHelper = new BVHHelper( level, sceneBVH );
-		sceneHelper.opacity = 0.75;
+		sceneHelper.opacity = 0.5;
 		sceneHelper.color.set( 0xffffff );
 		sceneHelper.update();
 		scene.add( sceneHelper );
@@ -465,7 +470,6 @@ function updateCamera() {
 function render() {
 
 	stats.update();
-	requestAnimationFrame( render );
 
 	const delta = Math.min( clock.getDelta(), 0.1 );
 
@@ -486,7 +490,6 @@ function render() {
 	if ( level ) {
 
 		sceneHelper.visible = params.displayBVH;
-		sceneHelper.depth = params.visualizeDepth;
 
 		const physicsSteps = params.physicsSteps;
 		for ( let i = 0; i < physicsSteps; i ++ ) {

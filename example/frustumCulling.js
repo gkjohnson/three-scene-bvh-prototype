@@ -18,14 +18,14 @@ const params = {
 
 let renderer, scene, camera, controls, stats;
 let sceneBVH, bvhHelper, batchedMesh;
-let statsElement;
+let outputElement;
 
 init();
 createObjects();
 
 function init() {
 
-	statsElement = document.getElementById( 'stats' );
+	outputElement = document.getElementById( 'output' );
 
 	// Renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -67,8 +67,26 @@ function init() {
 
 	const helperFolder = gui.addFolder( 'Helper' );
 	helperFolder.add( params, 'showHelper' );
-	helperFolder.add( params, 'helperDepth', 1, 25, 1 );
-	helperFolder.add( params, 'helperParents' );
+	helperFolder.add( params, 'helperDepth', 1, 25, 1 ).onChange( v => {
+
+		if ( bvhHelper ) {
+
+			bvhHelper.depth = v;
+			bvhHelper.update();
+
+		}
+
+	} );
+	helperFolder.add( params, 'helperParents' ).onChange( v => {
+
+		if ( bvhHelper ) {
+
+			bvhHelper.displayParents = v;
+			bvhHelper.update();
+
+		}
+
+	} );
 
 	// Events
 	window.addEventListener( 'resize', () => {
@@ -250,24 +268,18 @@ function render() {
 
 	stats.begin();
 
-	controls.update();
-
-	if ( bvhHelper ) {
-
-		bvhHelper.depth = params.helperDepth;
-		bvhHelper.displayParents = params.helperParents;
-		bvhHelper.visible = params.showHelper;
-
-	}
-
+	// Update GUI settings
+	if ( bvhHelper ) bvhHelper.visible = params.showHelper;
 	if ( params.animate ) batchedMesh.rotation.y += 0.0005;
+
+	controls.update();
 
 	const start = performance.now();
 	updateVisibility();
 	renderer.render( scene, camera );
 	const delta = performance.now() - start;
 
-	statsElement.innerText = `render: ${ delta.toFixed( 2 ) }ms\nvisible: ${ batchedMesh._multiDrawCount }`;
+	outputElement.innerText = `render: ${ delta.toFixed( 2 ) }ms\nvisible: ${ batchedMesh._multiDrawCount }`;
 
 	stats.end();
 
