@@ -9,6 +9,7 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const params = {
 	animate: true,
+	thirdPerson: false,
 	useBVH: true,
 	checkBoundingSphere: false,
 	showHelper: false,
@@ -16,8 +17,8 @@ const params = {
 	helperParents: false,
 };
 
-let renderer, scene, camera, controls, stats;
-let sceneBVH, bvhHelper, batchedMesh;
+let renderer, scene, camera, camera2, controls, stats;
+let sceneBVH, bvhHelper, batchedMesh, cameraHelper;
 let outputElement;
 
 init();
@@ -39,9 +40,16 @@ function init() {
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 100 );
 	camera.position.set( 18, 10, 0 );
 
+	camera2 = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 400 );
+	camera2.position.set( 0, 10, 200 );
+	camera2.lookAt( 0, 0, 0 );
+
+	cameraHelper = new THREE.CameraHelper( camera );
+
 	// Scene
 	scene = new THREE.Scene();
 	scene.fog = new THREE.Fog( 0x131619, 25, camera.far );
+	scene.add( cameraHelper );
 
 	// Lights
 	const light1 = new THREE.DirectionalLight( 0xffffff, 2.5 );
@@ -62,6 +70,7 @@ function init() {
 	// GUI
 	const gui = new GUI();
 	gui.add( params, 'animate' );
+	gui.add( params, 'thirdPerson' );
 	gui.add( params, 'useBVH' );
 	gui.add( params, 'checkBoundingSphere' );
 
@@ -134,7 +143,7 @@ function createObjects() {
 	sceneBVH = new StaticSceneBVH( batchedMesh );
 	bvhHelper = new BVHHelper( batchedMesh, sceneBVH, params.helperDepth );
 	bvhHelper.color.set( 0xffffff );
-	bvhHelper.opacity = 0.5;
+	bvhHelper.opacity = 0.1;
 	bvhHelper.instanceId = - 1;
 	scene.add( bvhHelper );
 
@@ -239,7 +248,23 @@ function render() {
 
 	const start = performance.now();
 	updateVisibility();
-	renderer.render( scene, camera );
+
+	if ( params.thirdPerson ) {
+
+		bvhHelper.opacity = 0.05;
+		cameraHelper.visible = true;
+		scene.fog.far = 1e10;
+		renderer.render( scene, camera2 );
+
+	} else {
+
+		bvhHelper.opacity = 0.5;
+		cameraHelper.visible = false;
+		scene.fog.far = camera.far;
+		renderer.render( scene, camera );
+
+	}
+
 	const delta = performance.now() - start;
 
 	outputElement.innerText = `render: ${ delta.toFixed( 2 ) }ms\nvisible: ${ batchedMesh._multiDrawCount }`;
