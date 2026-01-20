@@ -9,6 +9,9 @@ A prototype for a generalized Scene BVH implementation to enable efficient spati
 - [SkinnedMesh support](https://gkjohnson.github.io/three-scene-bvh-prototype/example/bundle/skinnedMeshes.html)
 - [Frustum Culling Demo](https://gkjohnson.github.io/three-scene-bvh-prototype/example/bundle/frustumCulling.html)
 
+**TODO**
+- Rename "StaticSceneBVH" to something that indicates it can be used for sub-hierarchies
+
 # Use
 
 Use the StaticSceneBVH instance directly:
