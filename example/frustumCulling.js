@@ -102,6 +102,11 @@ function init() {
 
 		camera.aspect = window.innerWidth / window.innerHeight;
 		camera.updateProjectionMatrix();
+
+		camera2.aspect = window.innerWidth / window.innerHeight;
+		camera2.updateProjectionMatrix();
+
+		cameraHelper.update();
 		renderer.setSize( window.innerWidth, window.innerHeight );
 
 	} );

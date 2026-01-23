@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'stats.js';
-import { AVERAGE, CENTER, MeshBVHHelper, SAH } from 'three-mesh-bvh';
+import { AVERAGE, CENTER, BVHHelper, SAH } from 'three-mesh-bvh';
 import { computeSceneBoundsTree, disposeSceneBoundsTree, acceleratedSceneRaycast } from '../src/ExtensionUtilities.js';
 
 // Extend Three.js Object3D prototype
@@ -260,7 +260,8 @@ function rebuildBVH() {
 		container.raycast = acceleratedSceneRaycast;
 		console.timeEnd( 'BVH Build' );
 
-		bvhHelper = new MeshBVHHelper( container, container.sceneBoundsTree, params.helperDepth );
+		bvhHelper = new BVHHelper( container, container.sceneBoundsTree, params.helperDepth );
+		bvhHelper.displayParents = params.displayParents;
 		bvhHelper.color.set( 0xffffff );
 		bvhHelper.opacity = 0.6;
 		scene.add( bvhHelper );
